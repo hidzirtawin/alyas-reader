@@ -1,0 +1,16 @@
+{
+  "name": "alyas-reader",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Alya's Reader — a calm, local-first ebook and comic reader for EPUB, PDF, Word, CBZ and CBR files, with natural narration.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["ebook", "comic", "epub", "pdf", "cbz", "cbr", "docx", "tts", "reader"],
+  "license": "MIT"
+}

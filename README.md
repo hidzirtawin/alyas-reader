@@ -13,7 +13,7 @@ Requires Node.js 18 or newer. There are **no npm dependencies** — the browser 
 
 **Live site:** https://hidzirtawin.github.io/alyas-reader/
 
-The hosted build is static. System voices work everywhere; for neural voices, the browser sends requests directly to OpenAI or ElevenLabs over HTTPS (both allow browser CORS). The local server adds a proxy so keys never leave the device when you self-host.
+The hosted build is static. System voices work everywhere, and ElevenLabs can be called directly from the browser. OpenAI is most reliable through the local server: OpenAI’s browser CORS support is inconsistent for error responses, so the hosted site may not surface a useful key error. The local server adds a proxy for both providers, keeping the key on your device.
 
 ---
 

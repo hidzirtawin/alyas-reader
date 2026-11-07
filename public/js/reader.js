@@ -366,8 +366,16 @@ async function openReflowBook(state) {
 
 function defaultStartChapter(book) {
   const frontMatter = /^(cover|title ?page|contents|table of contents|copyright|colophon|dedication|epigraph|half ?title|frontispiece)$/i;
-  let idx = book.chapters.findIndex(c => !frontMatter.test((c.label || '').trim()) && (c.words || 0) >= 25);
-  if (idx < 0) idx = book.chapters.findIndex(c => (c.words || 0) >= 25);
+  const bookTitle = normalizedText(book.title || '').toLowerCase();
+  const isFront = (c, i) => {
+    const label = normalizedText(c.label || '');
+    if (frontMatter.test(label)) return true;
+    if (i === 0 && bookTitle && label.toLowerCase() === bookTitle) return true;
+    return false;
+  };
+  let idx = book.chapters.findIndex((c, i) => !isFront(c, i) && (c.words || 0) >= 8);
+  if (idx < 0) idx = book.chapters.findIndex((c, i) => !isFront(c, i) && (c.words || 0) > 0);
+  if (idx < 0) idx = book.chapters.findIndex(c => (c.words || 0) > 0);
   return Math.max(0, idx);
 }
 

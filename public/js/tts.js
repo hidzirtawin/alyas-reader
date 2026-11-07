@@ -524,7 +524,10 @@ async function requestVoiceAudio(tts, text) {
     try {
       res = await directVoiceRequest(tts, body);
     } catch (err) {
-      throw new Error(`Could not reach the voice provider. ${err?.message || 'Check your connection and API key.'}`);
+      const hint = tts.provider === 'openai'
+        ? 'OpenAI voices are most reliable through the local server. On a static host, use system voices or ElevenLabs.'
+        : 'Check your connection and API key.';
+      throw new Error(`Could not reach the voice provider. ${hint}`);
     }
   }
 

@@ -11,6 +11,21 @@
   "engines": {
     "node": ">=18"
   },
-  "keywords": ["ebook", "comic", "epub", "pdf", "cbz", "cbr", "docx", "tts", "reader"],
-  "license": "MIT"
+  "keywords": [
+    "ebook",
+    "comic",
+    "epub",
+    "pdf",
+    "cbz",
+    "cbr",
+    "docx",
+    "tts",
+    "reader"
+  ],
+  "license": "MIT",
+  "homepage": "https://hidzirtawin.github.io/alyas-reader/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hidzirtawin/alyas-reader.git"
+  }
 }

@@ -17,6 +17,7 @@ import {
 import {
   $, esc, icon, clamp, formatBytes, downloadBlob,
 } from './util.js';
+import { getSleepTimer, startSleepTimer, cancelSleepTimer, formatSleepRemaining } from './sleep.js';
 
 export function renderSettings(app) {
   const view = $('#view');
@@ -153,6 +154,16 @@ export function renderSettings(app) {
               <input class="range" id="setWord" type="range" min="0" max="0.5" step="0.01" value="${r.wordSpacing || 0}" aria-label="Word spacing">
             </div>
             <div class="divider"></div>
+            <div class="set-row" style="margin-bottom:8px">
+              <div>
+                <div class="set-label">Sleep timer</div>
+                <div class="set-sub" id="sleepSub">${(() => { const t = getSleepTimer(); return t ? `Stops in ${formatSleepRemaining(t.remainingMs)} · screen dims` : 'Stop narration after a set time and dim the screen.'; })()}</div>
+              </div>
+              <select class="select" id="setSleep" aria-label="Sleep timer" style="width:118px">
+                <option value="off"${!getSleepTimer() ? ' selected' : ''}>Off</option>
+                ${[5, 10, 15, 20, 30, 45, 60, 90].map(m => `<option value="${m}"${getSleepTimer()?.minutes === m ? ' selected' : ''}>${m} minutes</option>`).join('')}
+              </select>
+            </div>
             <label class="switch">
               <input type="checkbox" id="setJustify" ${r.justify ? 'checked' : ''}>
               <span class="track"></span><span class="switch-label">Justify text</span>
@@ -337,6 +348,23 @@ function onSettingsChange(app, e) {
     savePrefs({ tts: { enabled: e.target.checked } });
     renderSettings(app);
     toast(e.target.checked ? 'Narration on' : 'Silent reading on', 'ok');
+    return;
+  }
+  if (id === 'setSleep') {
+    const value = e.target.value;
+    if (value === 'off') {
+      cancelSleepTimer();
+      const sub = $('#sleepSub');
+      if (sub) sub.textContent = 'Stop narration after a set time and dim the screen.';
+      toast('Sleep timer cancelled', 'ok');
+    } else {
+      const minutes = Number(value);
+      startSleepTimer(minutes);
+      const sub = $('#sleepSub');
+      const t = getSleepTimer();
+      if (sub && t) sub.textContent = `Stops in ${formatSleepRemaining(t.remainingMs)} · screen dims`;
+      toast(`Sleep timer set for ${minutes} minutes`, 'ok');
+    }
     return;
   }
   if (id === 'setFont') { setReaderPrefs({ font: e.target.value }); renderSettings(app); return; }

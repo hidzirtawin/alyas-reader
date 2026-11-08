@@ -34,6 +34,7 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 - **Move around** — previous/next chapter buttons sit in the reader footer, the chapter label opens contents, and a chapter dropdown jumps straight to any section. Press `G` for PDF/comic page jumps or a chapter-and-position jump.
 - **Make it yours** — 13 typefaces in a dropdown (Literata, Merriweather, Lora, EB Garamond, Libre Baskerville, Source Serif 4, Georgia, Palatino, Atkinson, Lexend, Inter, OpenDyslexic and System), four themes (Paper, Sepia, Night, Black), text size, line height, measure, paragraph and letter/word spacing, justification and hyphenation.
 - **Dyslexia-friendly mode** — one tap sets OpenDyslexic, larger text, roomy lines, wider letter/word spacing and left-aligned text.
+- **Sleep timer** — choose 5 to 90 minutes in Settings or the reader menu; narration stops and the screen dims when it ends.
 - **Marks & notes** — bookmarks and four-colour highlights with notes. Everything is grouped by book and reopens at the exact spot.
 - **Autosave** — position, settings, bookmarks and highlights are saved as you read. Comic progress and bookmarks are page-based. Export a JSON backup of notes and progress at any time.
 - **Keyboard-first** — see shortcuts below.

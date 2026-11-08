@@ -8,6 +8,7 @@ import { renderSettings } from './settings.js';
 import { openReader, closeReader } from './reader.js';
 import { shortcutsModal, toast } from './ui.js';
 import { openBookSources, maybeOfferDownloadedBook } from './sources.js';
+import { startSleepTimer, cancelSleepTimer, getSleepTimer, formatSleepRemaining } from './sleep.js';
 import { loadPiperCatalog, preloadPiperVoice, onPiperProgress, piperProgressLabel } from './tts.js';
 import { $, $$, clamp, formatBytes, debounce, icon } from './util.js';
 
@@ -103,6 +104,7 @@ const app = {
   closeReader(opts) { return closeReader(opts); },
   showShortcuts: shortcutsModal,
   openBookSources,
+  sleep: { start: startSleepTimer, cancel: cancelSleepTimer, get: getSleepTimer, format: formatSleepRemaining },
   pickFiles() { $('#fileInput')?.click(); },
 };
 
@@ -294,6 +296,38 @@ function warmDefaultVoice() {
     });
   }, 1600);
 }
+
+/* ── Sleep timer ─────────────────────────────────────────────────── */
+function showSleepVeil() {
+  const veil = $('#sleepVeil');
+  if (!veil) return;
+  veil.hidden = false;
+  const dismiss = () => {
+    veil.hidden = true;
+    veil.removeEventListener('click', dismiss);
+  };
+  veil.addEventListener('click', dismiss);
+}
+
+window.addEventListener('lumen:sleeptimer', event => {
+  const timer = event.detail;
+  const select = $('#setSleep');
+  const sub = $('#sleepSub');
+  if (!select || !sub) return;
+  if (!timer) {
+    select.value = 'off';
+    sub.textContent = 'Stop narration after a set time and dim the screen.';
+    return;
+  }
+  if ([...select.options].some(o => Number(o.value) === timer.minutes)) select.value = String(timer.minutes);
+  sub.textContent = `Stops in ${formatSleepRemaining(timer.remainingMs)} · screen dims`;
+});
+
+window.addEventListener('lumen:sleepend', () => {
+  window.lumen?.stopTTS?.();
+  if (document.querySelector('#reader.is-open')) showSleepVeil();
+  else toast('Sleep timer ended', 'info');
+});
 
 /* ── Boot ────────────────────────────────────────────────────────── */
 async function boot() {

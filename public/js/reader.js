@@ -16,6 +16,7 @@ import {
 import { openBookDetails } from './details.js';
 import { openVoiceModal } from './settings.js';
 import { openDictionary } from './dictionary.js';
+import { getSleepTimer, startSleepTimer, cancelSleepTimer, formatSleepRemaining } from './sleep.js';
 import { baseLanguage, languageName, languageMatches } from './language.js';
 import {
   $, esc, icon, clamp, debounce, uid, normalizedText,
@@ -119,6 +120,7 @@ export async function openReader(app, bookId, target = {}) {
 
   wireEvents(state);
   app.pauseTTS = () => state.engine?.pause();
+  app.stopTTS = () => { state.engine?.stop(); closeTTS(state); };
 
   try {
     if (state.mode === 'pdf') await openPdfBook(state);
@@ -176,7 +178,7 @@ export async function closeReader({ skipReload = false, skipSave = false } = {})
   document.body.classList.remove('reader-open');
   const shell = document.querySelector('.shell');
   if (shell) shell.inert = false;
-  if (state.app) state.app.pauseTTS = null;
+  if (state.app) { state.app.pauseTTS = null; state.app.stopTTS = null; }
   if (!skipReload) await state.app.reload();
 }
 
@@ -1960,6 +1962,33 @@ function handleTypeChange(state, e) {
    Menus / actions
    ═══════════════════════════════════════════════════════════════════ */
 
+function openSleepDialog(state) {
+  const active = getSleepTimer();
+  const body = document.createElement('div');
+  body.innerHTML = `
+    <p class="sleep-lead">Narration and audio stop when the timer ends. The screen dims so you can settle.</p>
+    <div class="sleep-grid">
+      ${[5, 10, 15, 20, 30, 45, 60, 90].map(m => `<button class="sleep-opt" data-sleep-min="${m}"><strong>${m}</strong><span>min</span></button>`).join('')}
+    </div>
+    ${active ? `<div class="sleep-active">Running · ${formatSleepRemaining(active.remainingMs)} left</div>` : ''}`;
+  const foot = document.createElement('div');
+  foot.innerHTML = active ? '<button class="btn btn-sm btn-danger" data-sleep-cancel>Cancel timer</button>' : '';
+  const m = modal({ eyebrow: 'Bedtime', title: 'Sleep timer', body, foot });
+  body.querySelectorAll('[data-sleep-min]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const minutes = Number(btn.dataset.sleepMin);
+      startSleepTimer(minutes);
+      m.close();
+      toast(`Sleep timer set for ${minutes} minutes`, 'ok');
+    });
+  });
+  foot.querySelector('[data-sleep-cancel]')?.addEventListener('click', () => {
+    cancelSleepTimer();
+    m.close();
+    toast('Sleep timer cancelled', 'ok');
+  });
+}
+
 function openGoTo(state) {
   if (state.mode === 'pdf' || state.mode === 'comic') {
     const max = state.numPages || 1;
@@ -2016,6 +2045,11 @@ function openMoreMenu(state) {
   const rect = refs.moreBtn.getBoundingClientRect();
   contextMenu(rect.right - 8, rect.bottom + 8, [
     { label: 'Go to page…', icon: 'list', onSelect: () => openGoTo(state) },
+    {
+      label: getSleepTimer() ? `Sleep timer · ${formatSleepRemaining(getSleepTimer().remainingMs)}` : 'Sleep timer…',
+      icon: 'moon',
+      onSelect: () => openSleepDialog(state),
+    },
     { label: 'Book details', icon: 'info', onSelect: () => openBookDetails(state.app, state.record, { fromReader: true }) },
     {
       label: 'Download original', icon: 'download', onSelect: async () => {

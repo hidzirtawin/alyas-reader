@@ -69,7 +69,7 @@ export function loadPiperCatalog() {
   if (piperCatalogPromise) return piperCatalogPromise;
   piperCatalogPromise = fetch(new URL('../vendor/piper/voices.json', import.meta.url))
     .then(r => r.ok ? r.json() : Promise.reject(new Error('catalog missing')))
-    .then(data => {
+    .then(async data => {
       const list = Array.isArray(data) ? data : data.voices || [];
       piperVoices = list.map(v => ({
         ...v,
@@ -81,11 +81,13 @@ export function loadPiperCatalog() {
         ),
         sizeMB: Math.max(1, Math.round((v.size_bytes || 0) / 1048576)),
       }));
+      await loadCustomVoices();
       return piperVoices;
     })
-    .catch(err => {
+    .catch(async err => {
       console.warn('Piper catalog could not be loaded', err);
       piperVoices = FALLBACK_PIPER;
+      await loadCustomVoices();
       return piperVoices;
     });
   return piperCatalogPromise;
@@ -94,6 +96,110 @@ export function loadPiperCatalog() {
 export function piperVoiceById(id) {
   const list = getPiperVoices();
   return list.find(v => v.id === id) || list[0];
+}
+
+async function allVoiceRecords() {
+  try {
+    const db = await piperDb();
+    if (!db) return [];
+    return await new Promise(resolve => {
+      try {
+        const req = db.transaction('voices').objectStore('voices').getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      } catch { resolve([]); }
+    });
+  } catch { return []; }
+}
+
+async function loadCustomVoices() {
+  const records = (await allVoiceRecords()).filter(rec => rec.custom);
+  const customs = records.map(rec => ({
+    id: rec.id,
+    name: rec.name || 'Imported voice',
+    lang: rec.lang || '',
+    language: rec.language || 'Imported',
+    country: rec.country || 'Imported',
+    quality: 'custom',
+    num_speakers: Number(rec.num_speakers) || 1,
+    speaker_id_map: rec.speaker_id_map || {},
+    size_bytes: rec.blob?.size || 0,
+    sizeMB: Math.max(1, Math.round((rec.blob?.size || 0) / 1048576)),
+    modelUrl: rec.id,
+    configUrl: rec.id,
+    custom: true,
+    community: false,
+  }));
+  piperVoices = piperVoices.filter(v => !v.custom).concat(customs);
+}
+
+/* Import a Piper-compatible .onnx + .onnx.json (or a zip) from this device. */
+export async function importCustomVoice(files = []) {
+  const chosen = Array.from(files);
+  if (!chosen.length) throw new Error('Choose a .onnx model and its .onnx.json config.');
+  let modelFile = chosen.find(f => /\.onnx$/i.test(f.name));
+  let configFile = chosen.find(f => /\.onnx\.json$/i.test(f.name) || /\.json$/i.test(f.name));
+  const zipFile = chosen.find(f => /\.zip$/i.test(f.name));
+  if (zipFile && window.JSZip) {
+    const archive = await window.JSZip.loadAsync(await zipFile.arrayBuffer());
+    const entries = Object.values(archive.files).filter(entry => !entry.dir);
+    const modelEntry = entries.find(entry => /\.onnx$/i.test(entry.name));
+    const configEntry = entries.find(entry => /\.onnx\.json$/i.test(entry.name));
+    if (modelEntry) {
+      const bytes = await modelEntry.async('uint8array');
+      modelFile = new File([bytes], modelEntry.name.split('/').pop(), { type: 'application/octet-stream' });
+    }
+    if (configEntry) {
+      configFile = new File([await configEntry.async('string')], configEntry.name.split('/').pop(), { type: 'application/json' });
+    }
+  }
+  if (!modelFile || !configFile) throw new Error('Include both the .onnx model and its .onnx.json config.');
+  let config;
+  try { config = JSON.parse(await configFile.text()); }
+  catch { throw new Error('That voice config is not valid JSON.'); }
+  if (!config?.audio?.sample_rate) throw new Error('That config does not look like a Piper voice.');
+
+  const stem = modelFile.name.replace(/\.onnx$/i, '');
+  const match = stem.match(/^([a-z]{2,3})[_-]([A-Z]{2})/);
+  const lang = match ? `${match[1]}_${match[2]}` : 'und';
+  let language = 'Imported';
+  try {
+    language = new Intl.DisplayNames(['en'], { type: 'language' }).of(match ? match[1] : 'und') || 'Imported';
+  } catch {}
+  const pretty = stem
+    .replace(/^[a-z]{2,3}[_-][A-Z]{2}-/i, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .trim();
+  const id = `custom:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const record = {
+    id,
+    custom: true,
+    name: pretty || 'Imported voice',
+    lang,
+    language,
+    country: 'Imported',
+    num_speakers: Number(config.num_speakers) || 1,
+    speaker_id_map: config.speaker_id_map || {},
+    config,
+    blob: modelFile,
+    savedAt: Date.now(),
+  };
+  const db = await piperDb();
+  if (!db) throw new Error('Browser storage is unavailable.');
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('voices', 'readwrite');
+    tx.objectStore('voices').put(record);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error || new Error('Could not save the voice.'));
+  });
+  await loadCustomVoices();
+  return piperVoiceById(id);
+}
+
+export async function removeCustomVoice(id) {
+  await deleteCachedVoice(id);
+  piperVoices = piperVoices.filter(v => v.id !== id);
 }
 
 /* ── Piper progress ───────────────────────────────────────────────── */
@@ -236,6 +342,10 @@ export const PIPER_PRESETS = [
   { id: 'accent-hindi', name: 'English · Hindi accent', group: 'accent', tag: 'L2-ARCTIC', voiceId: 'en_US-l2arctic-medium', speaker: 2, rate: 0.95, desc: 'English with a Hindi accent, female.' },
   { id: 'accent-vietnamese', name: 'English · Vietnamese accent', group: 'accent', tag: 'L2-ARCTIC', voiceId: 'en_US-l2arctic-medium', speaker: 1, rate: 0.95, desc: 'English with a Vietnamese accent, female.' },
   { id: 'accent-korean', name: 'English · Korean accent', group: 'accent', tag: 'L2-ARCTIC', voiceId: 'en_US-l2arctic-medium', speaker: 11, rate: 0.95, desc: 'English with a Korean accent, female.' },
+  { id: 'accent-au-matilda', name: 'Australian · Matilda', group: 'accent', tag: 'AU', voiceId: 'au_librivox', speaker: 7, rate: 0.96, desc: 'Australian English, female narrator.' },
+  { id: 'accent-au-marlo', name: 'Australian · Marlo', group: 'accent', tag: 'AU', voiceId: 'au_librivox', speaker: 2, rate: 0.93, desc: 'Warmer Australian female narrator, slightly slower.' },
+  { id: 'accent-au-banjo', name: 'Australian · Banjo', group: 'accent', tag: 'AU', voiceId: 'au_librivox', speaker: 5, rate: 0.95, desc: 'Australian English, male narrator.' },
+  { id: 'accent-au-flynn', name: 'Australian · Flynn', group: 'accent', tag: 'AU', voiceId: 'au_librivox', speaker: 6, rate: 0.95, desc: 'Classic Australian male narrator.' },
 ];
 
 export function piperVoiceForLanguage(language = '') {
@@ -336,7 +446,7 @@ export async function listCachedVoices() {
     } catch { resolve([]); }
   });
   const voices = getPiperVoices();
-  return records.map(rec => {
+  return records.filter(rec => !rec.custom).map(rec => {
     const voice = voices.find(v => v.modelUrl === rec.id);
     return {
       key: rec.id,
@@ -365,7 +475,13 @@ export async function clearCachedVoices() {
   if (!db) return;
   await new Promise(resolve => {
     const tx = db.transaction('voices', 'readwrite');
-    tx.objectStore('voices').clear();
+    const store = tx.objectStore('voices');
+    const req = store.getAll();
+    req.onsuccess = () => {
+      for (const rec of req.result || []) {
+        if (!rec.custom) store.delete(rec.id);
+      }
+    };
     tx.oncomplete = resolve;
     tx.onerror = resolve;
   });
@@ -453,6 +569,7 @@ class PiperVoiceProvider {
       return data;
     }
 
+    if (voice.custom) throw new Error('This imported voice is missing its files. Import it again.');
     const { configData, blob } = await downloadVoiceData(voice);
     const url = URL.createObjectURL(blob);
     this.urls.push(url);
@@ -522,6 +639,7 @@ export async function preloadPiperVoice(voiceId) {
     settlePiperProgress();
     return 'cached';
   }
+  if (voice.custom) return 'missing';
   await downloadVoiceData(voice);
   emitPiperProgress({ phase: 'ready', voiceId: voice.id, voiceName: voice.name, percent: 100 });
   settlePiperProgress();

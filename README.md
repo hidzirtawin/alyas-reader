@@ -58,13 +58,17 @@ Alya’s Reader runs [Piper](https://github.com/rhasspy/piper) (MIT) entirely in
 - **Audiobook-style presets** for warm, classic, British and studio narration, plus a **LibriVox-style** LibriTTS voice trained on volunteer audiobook recordings
 - **Cinema-style originals** — noir, leading lady, leading man, epic trailer and stage presets, named by genre rather than by real performers
 - **Character archetypes** — suave spy, wise elder, West Coast cool and news anchor, written as generic styles rather than impersonations
-- **Regional accents from open research corpora** — VCTK British, Scottish, Northern Irish, Irish, Welsh, South African, Indian, Australian and New Zealand English; L2-ARCTIC Mandarin-, Hindi-, Vietnamese- and Korean-accented English
+- **Regional accents from open research corpora** — VCTK British, Scottish, Northern Irish, Irish, Welsh, South African, Indian and New Zealand English; four Australian voices from the AU LibriVox model (Matilda, Marlo, Banjo and Flynn); L2-ARCTIC Mandarin-, Hindi-, Vietnamese- and Korean-accented English
 
 The default voice is **LibriVox-style** (LibriTTS, 2,306 speakers). It starts downloading in the background the first time you open the app, with a progress bar, and is cached for offline use. The first time you choose any other voice, its model is downloaded from Hugging Face and stored in the browser. Models range from about 20 MB to 115 MB; after that the voice works offline. No account or API key is involved, and your book text never leaves your device.
 
 The Australian voice is a community LibriVox model by DataCraftsmanAustralia, licensed **CC-BY-4.0**. Its ten speakers are available in the speaker picker.
 
 **Not included:** a Texas-drawl preset, celebrity clones, or the proprietary narrators used by Audible, Libby and OverDrive. Those narrators are human or licensed voices, and unauthorized impersonations are intentionally excluded. The audiobook presets are original Piper voices chosen for a similar feel.
+
+### Importing a voice
+
+Any Piper-compatible `.onnx` model with its `.onnx.json` config (or a zip containing both) can be imported from **Settings → Voice & narration → Configure → Piper → Import a Piper voice**. This is the way to use community models trained on [Mozilla Common Voice](https://github.com/common-voice/common-voice), LibriTTS or other open datasets. The files stay in your browser and can be removed from the same panel.
 
 ### No voice at all
 

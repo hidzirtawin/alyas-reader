@@ -11,6 +11,7 @@ import {
   getPiperVoices, loadPiperCatalog, piperVoiceById, piperSpeakerName,
   PIPER_PRESETS, onPiperProgress, piperProgressLabel,
   listCachedVoices, deleteCachedVoice, clearCachedVoices,
+  importCustomVoice, removeCustomVoice,
 } from './tts.js';
 import {
   modal, toast, confirmDialog,
@@ -537,6 +538,29 @@ export async function openVoiceModal({ onSaved } = {}) {
     const previewBtn = tabBody.querySelector('[data-preview]');
     previewBtn?.addEventListener('click', () => testVoice(previewBtn));
     if (tab === 'piper') renderPiperList();
+    const importBtn = tabBody.querySelector('#importVoice');
+    const importInput = tabBody.querySelector('#importVoiceFile');
+    importBtn?.addEventListener('click', () => importInput?.click());
+    importInput?.addEventListener('change', async event => {
+      const files = Array.from(event.target.files || []);
+      event.target.value = '';
+      if (!files.length) return;
+      const old = importBtn.innerHTML;
+      importBtn.disabled = true;
+      importBtn.innerHTML = '<span class="busy-dot"></span> Importing…';
+      try {
+        const voice = await importCustomVoice(files);
+        draft.piperVoice = voice.id;
+        draft.piperSpeaker = 0;
+        renderTabs();
+        toast(`Imported ${voice.name}`, 'ok');
+      } catch (err) {
+        toast(err.message || 'Could not import that voice', 'err');
+      } finally {
+        importBtn.disabled = false;
+        importBtn.innerHTML = old;
+      }
+    });
   }
 
   function tabMarkup(which) {
@@ -586,6 +610,11 @@ export async function openVoiceModal({ onSaved } = {}) {
         }).join('')}
         <p class="preset-note">Celebrity, Audible, Libby and OverDrive narrators are real people or licensed voices. These presets are original open Piper voices — no real person is cloned or impersonated. Regional accents come from the open <strong>VCTK</strong> and <strong>L2-ARCTIC</strong> research corpora; they are real accent characteristics, not impersonations. <strong>LibriVox-style</strong> uses LibriTTS, trained on volunteer LibriVox recordings.</p>
       </div>
+      <div class="custom-import">
+        <button class="btn btn-sm" id="importVoice">${icon('upload')} Import a Piper voice</button>
+        <input type="file" id="importVoiceFile" accept=".onnx,.json,.zip" multiple hidden>
+        <p class="hint">Bring a Piper-compatible <strong>.onnx</strong> + <strong>.onnx.json</strong> (or a zip) from any open project. Models trained on <a href="https://github.com/common-voice/common-voice" target="_blank" rel="noopener noreferrer">Mozilla Common Voice</a> or other open datasets stay on this device.</p>
+      </div>
       <div class="field" style="margin-bottom:10px;margin-top:12px">
         <label>Piper voices <span class="dim" style="font-weight:400">· ${all.length} voices · free · offline</span></label>
         <div style="display:flex;gap:8px;margin-top:2px">
@@ -595,7 +624,8 @@ export async function openVoiceModal({ onSaved } = {}) {
             ${languages.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('')}
           </select>
         </div>
-        <div class="piper-note" id="piperNote" style="margin-top:8px">First use downloads about ${selected.sizeMB} MB for ${esc(selected.name)}. After that it is cached offline.</div>
+        <div class="piper-note" id="piperNote" style="margin-top:8px">${selected.custom ? `Imported voice · ${selected.sizeMB} MB · stored on this device.` : `First use downloads about ${selected.sizeMB} MB for ${esc(selected.name)}. After that it is cached offline.`}</div>
+        <div id="customVoiceBar"></div>
         <div class="voice-list" id="piperList" style="max-height:270px;margin-top:8px"></div>
       </div>
       <div id="piperSpeakerWrap"></div>
@@ -635,7 +665,7 @@ export async function openVoiceModal({ onSaved } = {}) {
         <span class="playing-dot"></span>
         <span class="vname">${esc(v.name)}</span>
         <span class="vlang">${esc(v.country || v.accent)}${v.num_speakers > 1 ? ` · ${v.num_speakers} speakers` : ''}</span>
-        ${v.community ? '<span class="vtag">Community</span>' : (v.quality ? `<span class="vtag">${esc(v.quality)}</span>` : '')}
+        ${v.custom ? '<span class="vtag">Custom</span>' : v.community ? '<span class="vtag">Community</span>' : (v.quality ? `<span class="vtag">${esc(v.quality)}</span>` : '')}
       </button>`).join('')}
     `).join('');
     renderPiperSpeaker();
@@ -690,7 +720,31 @@ export async function openVoiceModal({ onSaved } = {}) {
     if (!note) return;
     const v = piperVoiceById(draft.piperVoice);
     const sp = piperSpeakerName(v, draft.piperSpeaker);
-    note.textContent = `First use downloads about ${v.sizeMB} MB for ${v.name}${sp ? ` · ${sp}` : ''}. After that it is cached offline.`;
+    note.textContent = v.custom
+      ? `Imported voice${sp ? ` · ${sp}` : ''} · ${v.sizeMB} MB · stored on this device.`
+      : `First use downloads about ${v.sizeMB} MB for ${v.name}${sp ? ` · ${sp}` : ''}. After that it is cached offline.`;
+    renderCustomVoiceBar();
+  }
+
+  function renderCustomVoiceBar() {
+    const bar = tabBody.querySelector('#customVoiceBar');
+    if (!bar) return;
+    const v = piperVoiceById(draft.piperVoice);
+    if (!v?.custom) { bar.innerHTML = ''; return; }
+    bar.innerHTML = `<button class="btn btn-sm btn-danger" id="removeCustomVoice" style="margin-top:8px">${icon('trash')} Remove imported voice</button>`;
+    bar.querySelector('#removeCustomVoice').addEventListener('click', async () => {
+      const ok = await confirmDialog({
+        title: 'Remove this imported voice?',
+        message: 'Its model files will be deleted from this device. You can import them again later.',
+        confirmLabel: 'Remove voice',
+      });
+      if (!ok) return;
+      await removeCustomVoice(v.id);
+      draft.piperVoice = 'en_US-libritts_r-medium';
+      draft.piperSpeaker = 0;
+      renderTabs();
+      toast('Imported voice removed', 'ok');
+    });
   }
 
   async function testVoice(btn) {

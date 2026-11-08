@@ -497,9 +497,9 @@ function renderChapter(state, index, opts = {}) {
   });
 
   if (opts.autoplayTTS) {
-    setTimeout(() => {
-      if (S === state && state.renderToken === token) startTTS(state, { autoplay: true });
-    }, 260);
+    // Start immediately: timers can be frozen when a phone screen locks,
+    // which used to leave narration stopped at the end of a chapter.
+    if (S === state && state.renderToken === token) startTTS(state, { autoplay: true });
   }
 }
 
@@ -1303,7 +1303,9 @@ function updateTTSState(state, st) {
     refs.ttsPos.textContent = `${Math.min((state.engine.index || 0) + 1, state.engine.total)} / ${state.engine.total}`;
   }
   if (navigator.mediaSession) {
-    try { navigator.mediaSession.playbackState = st === 'playing' ? 'playing' : st === 'paused' ? 'paused' : 'none'; } catch {}
+    try {
+      navigator.mediaSession.playbackState = (st === 'playing' || st === 'loading') ? 'playing' : st === 'paused' ? 'paused' : 'none';
+    } catch {}
   }
   if (st === 'playing') updateMediaSession(state);
 }

@@ -518,6 +518,7 @@ export class SpeechEngine {
     this._audio = null;
     this.voice = null;
     this._audioEl = null;
+    this._keepAlive = null;
     this._primed = false;
     this._audioUrl = null;
     this._cache = new Map();
@@ -561,6 +562,7 @@ export class SpeechEngine {
         this._setPlaying();
         this._speakSystemChunk();
       } else if (this._audio) {
+        this._startKeepAlive();
         this._setPlaying();
         this._audio.play().catch(err => this._fail(err.message));
       } else {
@@ -576,6 +578,7 @@ export class SpeechEngine {
   // Called synchronously from a tap so iOS allows the later async playback.
   _primeAudio() {
     if (this.provider !== 'piper') return;
+    this._startKeepAlive();
     if (!this._audioEl) this._audioEl = new Audio();
     if (this._primed) return;
     const audio = this._audioEl;
@@ -598,6 +601,7 @@ export class SpeechEngine {
   pause() {
     if (this.state !== 'playing' && this.state !== 'loading') return;
     this._token++;
+    this._stopKeepAlive();
     clearTimeout(this._pauseTimer);
     this._pauseTimer = null;
     if (this.provider === 'system') {
@@ -611,6 +615,7 @@ export class SpeechEngine {
 
   stop({ keepIndex = true } = {}) {
     this._invalidate();
+    this._stopKeepAlive();
     this._setState('idle');
     if (!keepIndex) this.index = 0;
     this._releaseWakeLock();
@@ -756,6 +761,7 @@ export class SpeechEngine {
     try {
       await audio.play();
       if (token !== this._token) { audio.pause(); return; }
+      this._startKeepAlive();
       this._setState('playing');
       this._requestWakeLock();
     } catch {
@@ -776,6 +782,7 @@ export class SpeechEngine {
   _advanceSentence() {
     if (this.index + 1 >= this.sentences.length) {
       this._token++;
+      this._stopKeepAlive();
       this._setState('idle');
       this._releaseWakeLock();
       this.onEnd();
@@ -809,6 +816,7 @@ export class SpeechEngine {
 
   _fail(message) {
     this._invalidate();
+    this._stopKeepAlive();
     this._setState('idle');
     this._releaseWakeLock();
     this.onError(message);
@@ -860,7 +868,7 @@ export class SpeechEngine {
   _prefetch(sentenceIndex) {
     if (this.provider !== 'piper') return;
     // Queue the next two sentences so first-time generation has a head start.
-    for (let d = 1; d <= 2; d++) {
+    for (let d = 1; d <= 3; d++) {
       const next = this.sentences[sentenceIndex + d];
       if (!next) break;
       const text = cleanForSpeech(next.text);
@@ -887,6 +895,24 @@ export class SpeechEngine {
   }
 
   /* ── wake lock ───────────────────────────────────────────────── */
+  _startKeepAlive() {
+    if (this.provider !== 'piper') return;
+    if (!this._keepAlive) {
+      const audio = new Audio(silentAudioSrc());
+      audio.loop = true;
+      audio.volume = 0.0001;
+      audio.setAttribute('playsinline', '');
+      this._keepAlive = audio;
+    }
+    if (this._keepAlive.paused) this._keepAlive.play().catch(() => {});
+  }
+
+  _stopKeepAlive() {
+    if (!this._keepAlive) return;
+    try { this._keepAlive.pause(); } catch {}
+    this._keepAlive = null;
+  }
+
   async _requestWakeLock() {
     if (!('wakeLock' in navigator) || this._wakeLock) return;
     try {

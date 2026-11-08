@@ -9,7 +9,7 @@ import {
 import {
   previewSpeech, stopPreview, describeVoice,
   getPiperVoices, loadPiperCatalog, piperVoiceById, piperSpeakerName,
-  PIPER_PRESETS, OPENAI_VOICES, onPiperProgress, piperProgressLabel,
+  PIPER_PRESETS, onPiperProgress, piperProgressLabel,
   listCachedVoices, deleteCachedVoice, clearCachedVoices,
   importCustomVoice, removeCustomVoice,
 } from './tts.js';
@@ -31,11 +31,9 @@ export function renderSettings(app) {
   const storage = app.storage || { used: 0, quota: 0 };
   const usedPct = storage.quota ? clamp((storage.used / storage.quota) * 100, 0.5, 100) : 0;
   const voiceName = describeVoice();
-  const voiceSub = !tts.enabled
-    ? 'Text only · no narration'
-    : tts.provider === 'openai'
-      ? 'OpenAI · cloud voice'
-      : 'Piper · free · offline neural voice';
+  const voiceSub = tts.enabled
+    ? 'Piper · free · offline neural voice'
+    : 'Text only · no narration';
 
   view.innerHTML = `
     <div class="page-head">
@@ -120,7 +118,7 @@ export function renderSettings(app) {
               </label>
               <div style="margin-top:14px"><button class="btn btn-sm" data-preview-voice>${icon('volume')} Hear a sample</button></div>
             </div>
-            <p class="hint"><strong>Piper</strong> voices are free and run entirely in this browser. The first use downloads an open voice model (20–115 MB) from Hugging Face, then works offline. <strong>OpenAI</strong> voices are an optional cloud alternative that requires your API key and sends book text to OpenAI.</p>
+            <p class="hint"><strong>Piper</strong> voices are free and run entirely in this browser. The first use downloads an open voice model (20–115 MB) from Hugging Face, then works offline. No accounts or API keys.</p>
           </div>
         </section>
       </div>
@@ -226,7 +224,7 @@ export function renderSettings(app) {
               <button class="btn btn-sm" id="showShortcuts">${icon('keyboard')} View</button>
             </div>
             <div class="divider"></div>
-            <p class="hint" style="line-height:1.65">EPUB rendering, PDF.js, Mammoth and JSZip run entirely on your device. Natural narration uses <strong>Piper</strong> (MIT, from rhasspy/piper) locally, with optional <strong>OpenAI</strong> cloud voices if you add your own API key.</p>
+            <p class="hint" style="line-height:1.65">EPUB rendering, PDF.js, Mammoth and JSZip run entirely on your device. Natural narration uses <strong>Piper</strong> (MIT, from rhasspy/piper) running locally in your browser. No accounts or API keys.</p>
             <p class="hint">Alya’s Reader · build ${BUILD}</p>
           </div>
         </section>
@@ -454,7 +452,6 @@ function exportData(app) {
   try {
     const prefs = getPrefs();
     const safeTts = { ...prefs.tts };
-    delete safeTts.openaiKey;
     const payload = {
       app: 'Alya’s Reader',
       version: 1,
@@ -488,14 +485,13 @@ export async function openVoiceModal({ onSaved } = {}) {
   const original = getPrefs().tts;
   const draft = { ...original };
   let tab = draft.enabled ? draft.provider : 'silent';
-  if (!['piper', 'openai'].includes(tab)) tab = 'piper';
+  if (tab !== 'silent') tab = 'piper';
 
   const body = document.createElement('div');
   body.innerHTML = `
     <div class="provider-tabs" role="tablist" aria-label="Narration mode">
       <button class="provider-tab" data-tab="silent" role="tab">${icon('eye-off')} Silent</button>
       <button class="provider-tab" data-tab="piper" role="tab">${icon('headphones')} Piper <span class="tag">Free</span></button>
-      <button class="provider-tab" data-tab="openai" role="tab">${icon('sparkles')} OpenAI <span class="tag">Cloud</span></button>
     </div>
     <div id="voiceTabBody"></div>
     <div class="divider" style="margin:18px 0 14px"></div>
@@ -524,7 +520,7 @@ export async function openVoiceModal({ onSaved } = {}) {
   const m = modal({
     eyebrow: 'Narration',
     title: 'Choose how Alya’s Reader speaks',
-    subtitle: 'Free offline Piper voices, regional accents and optional OpenAI cloud voices.',
+    subtitle: 'Free, offline neural voices from Piper — with regional accents and full speaker control.',
     body,
     foot,
     wide: true,
@@ -577,39 +573,6 @@ export async function openVoiceModal({ onSaved } = {}) {
             <div><strong>Silent reading</strong><p>Bookmarks, highlights, notes, progress and every appearance control still work exactly the same.</p></div>
           </div>
         </div>`;
-    }
-
-    if (which === 'openai') {
-      const model = draft.openaiModel || 'gpt-4o-mini-tts';
-      return `
-        <div class="callout" style="margin-bottom:14px">${icon('sparkles')}<span><strong>OpenAI cloud voices.</strong> Natural GPT speech. Your API key stays in this browser; book text is sent to OpenAI only while this voice is selected. Usage is billed by OpenAI.</span></div>
-        <div class="field">
-          <label for="vmOpenaiKey">OpenAI API key</label>
-          <input class="input" id="vmOpenaiKey" type="password" value="${esc(draft.openaiKey || '')}" placeholder="sk-…" autocomplete="off" spellcheck="false">
-          <p class="hint">Create a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">platform.openai.com/api-keys</a>. It is stored locally, like your books.</p>
-        </div>
-        <div class="field" style="margin-top:12px">
-          <label for="vmOpenaiModel">Model</label>
-          <select class="select" id="vmOpenaiModel">
-            <option value="gpt-4o-mini-tts"${model === 'gpt-4o-mini-tts' ? ' selected' : ''}>GPT-4o mini TTS · most natural</option>
-            <option value="tts-1-hd"${model === 'tts-1-hd' ? ' selected' : ''}>TTS-1 HD · high quality</option>
-            <option value="tts-1"${model === 'tts-1' ? ' selected' : ''}>TTS-1 · faster</option>
-          </select>
-        </div>
-        <div class="field" style="margin-top:12px">
-          <label for="vmOpenaiVoice">Voice</label>
-          <select class="select" id="vmOpenaiVoice">
-            ${OPENAI_VOICES.map(v => `<option value="${v.id}"${draft.openaiVoice === v.id ? ' selected' : ''}>${esc(v.name)} — ${esc(v.desc)}</option>`).join('')}
-          </select>
-        </div>
-        ${model.startsWith('gpt-4o') ? `<div class="field" style="margin-top:12px">
-          <label for="vmOpenaiInstructions">Delivery instructions</label>
-          <textarea class="input" id="vmOpenaiInstructions" rows="3" style="height:auto;resize:vertical" spellcheck="false">${esc(draft.openaiInstructions || '')}</textarea>
-          <p class="hint">Tell the voice how to read: warm, unhurried, gentle, dramatic, and so on.</p>
-        </div>` : ''}
-        <div class="slider-line"><span style="font-size:11px;width:84px;color:var(--ink-3)">Speed</span><input class="range" id="vmRate" type="range" min="0.5" max="2" step="0.05" value="${draft.rate}"><output id="vmRateOut">${draft.rate.toFixed(2)}×</output></div>
-        <div style="margin-top:14px"><button class="btn btn-sm" data-preview>${icon('sparkles')} Generate a sample</button></div>
-        <p class="hint" style="margin-top:10px">OpenAI voices need an internet connection and are billed per character. Choose Piper for free offline narration.</p>`;
     }
 
     // Piper — full catalog
@@ -873,10 +836,6 @@ export async function openVoiceModal({ onSaved } = {}) {
     } else if (id === 'vmPause') {
       draft.sentencePause = Number(e.target.value);
       body.querySelector('#vmPauseOut').textContent = `${draft.sentencePause.toFixed(2)}s`;
-    } else if (id === 'vmOpenaiKey') {
-      draft.openaiKey = e.target.value.trim();
-    } else if (id === 'vmOpenaiInstructions') {
-      draft.openaiInstructions = e.target.value;
     } else if (id === 'vmPiperSearch') {
       renderPiperList();
     }
@@ -886,8 +845,6 @@ export async function openVoiceModal({ onSaved } = {}) {
     if (e.target.id === 'vmAutoAdvance') draft.autoAdvance = e.target.checked;
     else if (e.target.id === 'vmHighlight') draft.highlight = e.target.checked;
     else if (e.target.id === 'vmPiperLang') renderPiperList();
-    else if (e.target.id === 'vmOpenaiVoice') { draft.openaiVoice = e.target.value; }
-    else if (e.target.id === 'vmOpenaiModel') { draft.openaiModel = e.target.value; renderTabs(); }
   });
 
 

@@ -1293,7 +1293,7 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
 .modal .callout svg { width: 15px; height: 15px; flex: none; color: var(--accent); margin-top: 1px; }
 
 /* voice modal */
-.provider-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); margin-bottom: 20px; }
+.provider-tabs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 4px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); margin-bottom: 20px; }
 .provider-tab { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 6px; border-radius: 9px; font-size: 11.5px; font-weight: 500; color: var(--ink-2); }
 .provider-tab svg { width: 14px; height: 14px; }
 .provider-tab.is-active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); font-weight: 600; }
@@ -1667,7 +1667,6 @@ kbd { font-family: var(--font-ui); font-size: 10px; font-weight: 600; min-width:
 
 .selection-bar.is-below::after { top: -5px; bottom: auto; }
 
-.provider-tabs { grid-template-columns: repeat(3, 1fr); }
 .provider-tab { flex-wrap: wrap; row-gap: 3px; }
 .outloud-status {
   display: flex; align-items: center; gap: 8px;
@@ -1726,7 +1725,6 @@ kbd { font-family: var(--font-ui); font-size: 10px; font-weight: 600; min-width:
 .mark-group-head span { max-width: 46vw; }
 
 @media (max-width: 680px) {
-  .provider-tabs { grid-template-columns: repeat(2, 1fr); }
   .reader-stage.pdf-stage { padding: 22px 12px 140px; }
   .drop-card { padding: 40px 22px; }
   .drop-card h2 { font-size: 23px; }

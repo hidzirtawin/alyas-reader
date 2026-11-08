@@ -8,7 +8,7 @@ import {
 import { buildReflowable, buildComicBook, isComicFormat } from './renderers.js';
 import { PdfView } from './pdfview.js';
 import { ComicView } from './comicview.js';
-import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName, OPENAI_VOICES } from './tts.js';
+import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName } from './tts.js';
 import {
   toast, modal, confirmDialog, contextMenu, closeAllModals, shortcutsModal,
   formatLabel, isModalOpen,
@@ -1482,9 +1482,6 @@ function updateReaderVoiceChip(state) {
   let label;
   if (!tts.enabled) {
     label = 'Silent reading';
-  } else if (tts.provider === 'openai') {
-    const v = OPENAI_VOICES.find(x => x.id === tts.openaiVoice);
-    label = `OpenAI · ${v?.name || 'Voice'}`;
   } else {
     const override = state?.engine?.voice;
     if (override?.name) {

@@ -46,10 +46,66 @@ export function defaultVoiceURI() {
 export function describeVoice() {
   const tts = getPrefs().tts;
   if (!tts.enabled) return 'Silent reading';
+  if (tts.provider === 'outloud') return `Out Loud · ${outLoudVoiceName(tts.outloudVoice)}`;
   if (tts.provider === 'openai') return `OpenAI · ${cap(tts.openaiVoice)}`;
   if (tts.provider === 'elevenlabs') return `ElevenLabs · ${elevenPresetName(tts.elevenVoice)}`;
   const v = findVoice(tts.voiceURI) || englishVoices()[0];
   return v ? `System · ${v.name}` : 'System voice';
+}
+
+/* ── Out Loud (local app on 127.0.0.1:51730) ─────────────────────── */
+export const OUTLOUD_DEFAULT_VOICE = 'af_heart';
+let outLoudCache = null;
+let outLoudSource = null;
+
+export function outLoudVoiceName(id = '') {
+  if (!id) return 'Heart';
+  if (/[*+]/.test(id)) return 'Custom blend';
+  const hit = outLoudCache?.find(v => v.id === id);
+  if (hit) return hit.name || cap(id.split('_')[1] || id);
+  const tail = id.split('_').slice(1).join(' ');
+  return tail ? cap(tail) : cap(id);
+}
+
+export function cachedOutLoudVoices() {
+  return outLoudCache;
+}
+
+export function outLoudEndpointSource() {
+  return outLoudSource;
+}
+
+export async function fetchOutLoudVoices({ force = false } = {}) {
+  if (outLoudCache && !force) return outLoudCache;
+  const endpoints = [
+    '/api/outloud/voices',
+    'http://127.0.0.1:51730/api/v1/audio/voices',
+    'http://localhost:51730/api/v1/audio/voices',
+  ];
+  let proxyDown = false;
+  for (const url of endpoints) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+    try {
+      const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+      clearTimeout(timer);
+      if (res.status === 502 || res.status === 503) {
+        proxyDown = true;
+        break;
+      }
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (Array.isArray(data.voices) && data.voices.length) {
+        outLoudCache = data.voices;
+        outLoudSource = url;
+        return outLoudCache;
+      }
+    } catch {
+      clearTimeout(timer);
+    }
+  }
+  if (proxyDown) throw new Error('Out Loud is not running. Open the Out Loud app, then try again.');
+  throw new Error('Out Loud was not detected. Open the Out Loud app, then try again.');
 }
 
 export const ELEVEN_PRESETS = [
@@ -282,6 +338,7 @@ export class SpeechEngine {
     const audio = new Audio(entry.url);
     this._audio = audio;
     this._audioUrl = entry.url;
+    audio.volume = clampNum(getPrefs().tts.volume ?? 0.9, 0, 1);
     if (this.provider === 'elevenlabs') {
       const rate = clampNum(getPrefs().tts.rate, 0.5, 2);
       audio.playbackRate = rate;
@@ -361,8 +418,15 @@ export class SpeechEngine {
   /* ── cloud audio fetch / cache ───────────────────────────────── */
   _cacheKey(text) {
     const tts = getPrefs().tts;
-    const voice = tts.provider === 'openai' ? tts.openaiVoice : tts.elevenVoice;
-    return `${tts.provider}|${voice}|${tts.provider === 'openai' ? tts.openaiModel : tts.elevenModel}|${tts.rate}|${text}`;
+    const voice = tts.provider === 'openai'
+      ? tts.openaiVoice
+      : tts.provider === 'outloud'
+        ? tts.outloudVoice || OUTLOUD_DEFAULT_VOICE
+        : tts.elevenVoice;
+    const model = tts.provider === 'openai'
+      ? tts.openaiModel
+      : tts.provider === 'outloud' ? 'kokoro' : tts.elevenModel;
+    return `${tts.provider}|${voice}|${model}|${tts.rate}|${text}`;
   }
 
   async _getAudio(text) {
@@ -372,8 +436,9 @@ export class SpeechEngine {
     if (this._inFlight.has(key)) return this._inFlight.get(key);
 
     const tts = getPrefs().tts;
+    const needsKey = tts.provider === 'openai' || tts.provider === 'elevenlabs';
     const keyName = tts.provider === 'openai' ? tts.openaiKey : tts.elevenKey;
-    if (!keyName) throw new Error(`Add your ${tts.provider === 'openai' ? 'OpenAI' : 'ElevenLabs'} API key in Voice settings.`);
+    if (needsKey && !keyName) throw new Error(`Add your ${tts.provider === 'openai' ? 'OpenAI' : 'ElevenLabs'} API key in Voice settings.`);
 
     const promise = requestVoiceAudio(tts, text)
       .then(blob => {
@@ -392,7 +457,8 @@ export class SpeechEngine {
   _prefetch(sentenceIndex) {
     if (this.provider === 'system') return;
     const tts = getPrefs().tts;
-    if (!(tts.provider === 'openai' ? tts.openaiKey : tts.elevenKey)) return;
+    const needsKey = tts.provider === 'openai' || tts.provider === 'elevenlabs';
+    if (needsKey && !(tts.provider === 'openai' ? tts.openaiKey : tts.elevenKey)) return;
     const next = this.sentences[sentenceIndex + 1];
     if (!next) return;
     const text = cleanForSpeech(next.text);
@@ -445,6 +511,14 @@ function clampNum(n, min, max) {
    Both providers explicitly allow browser CORS. */
 
 function voicePayload(tts, text) {
+  if (tts.provider === 'outloud') {
+    return {
+      provider: 'outloud',
+      text,
+      speed: tts.rate,
+      voice: tts.outloudVoice || OUTLOUD_DEFAULT_VOICE,
+    };
+  }
   return {
     provider: tts.provider,
     key: tts.provider === 'openai' ? tts.openaiKey : tts.elevenKey,
@@ -460,7 +534,7 @@ async function voiceError(res) {
   let msg = `Voice generation failed (${res.status}).`;
   try {
     const data = await res.json();
-    const detail = data?.error?.message || data?.detail?.message || data?.detail || data?.message;
+    const detail = data?.error?.message || data?.detail?.message || data?.detail || data?.message || (typeof data?.error === 'string' ? data.error : null);
     if (typeof detail === 'string' && detail.trim()) msg = detail.trim().slice(0, 400);
   } catch {}
   if (res.status === 401 || res.status === 403) msg = 'The API key was rejected. Check it in Voice settings.';
@@ -469,6 +543,27 @@ async function voiceError(res) {
 }
 
 async function directVoiceRequest(tts, body) {
+  if (tts.provider === 'outloud') {
+    const payload = {
+      voice: body.voice,
+      input: body.text,
+      speed: body.speed,
+      response_format: 'mp3',
+    };
+    let lastError = null;
+    for (const base of ['http://127.0.0.1:51730', 'http://localhost:51730']) {
+      try {
+        return await fetch(`${base}/api/v1/audio/speech`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error('Out Loud is not reachable.');
+  }
   if (tts.provider === 'openai') {
     const payload = {
       model: body.model,
@@ -524,9 +619,11 @@ async function requestVoiceAudio(tts, text) {
     try {
       res = await directVoiceRequest(tts, body);
     } catch (err) {
-      const hint = tts.provider === 'openai'
-        ? 'OpenAI voices are most reliable through the local server. On a static host, use system voices or ElevenLabs.'
-        : 'Check your connection and API key.';
+      const hint = tts.provider === 'outloud'
+        ? 'Open the Out Loud app and try again. On the hosted site, browser security may block localhost access — use the local version for Out Loud voices.'
+        : tts.provider === 'openai'
+          ? 'OpenAI voices are most reliable through the local server. On a static host, use system voices or ElevenLabs.'
+          : 'Check your connection and API key.';
       throw new Error(`Could not reach the voice provider. ${hint}`);
     }
   }
@@ -567,11 +664,13 @@ export async function previewSpeech(tts, text = 'This is how I’ll read your bo
     speechSynthesis.speak(utter);
     return;
   }
+  const needsKey = tts.provider === 'openai' || tts.provider === 'elevenlabs';
   const key = tts.provider === 'openai' ? tts.openaiKey : tts.elevenKey;
-  if (!key) throw new Error(`Add your ${tts.provider === 'openai' ? 'OpenAI' : 'ElevenLabs'} API key first.`);
+  if (needsKey && !key) throw new Error(`Add your ${tts.provider === 'openai' ? 'OpenAI' : 'ElevenLabs'} API key first.`);
   const blob = await requestVoiceAudio(tts, text);
   previewUrl = URL.createObjectURL(blob);
   previewAudio = new Audio(previewUrl);
+  previewAudio.volume = clampNum(tts.volume ?? 0.9, 0, 1);
   previewAudio.playbackRate = tts.provider === 'elevenlabs' ? clampNum(tts.rate, 0.5, 2) : 1;
   previewAudio.onended = () => { clearPreviewAudio(); };
   await previewAudio.play();

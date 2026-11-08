@@ -1393,8 +1393,21 @@ kbd { font-family: var(--font-ui); font-size: 10px; font-weight: 600; min-width:
 
 .selection-bar.is-below::after { top: -5px; bottom: auto; }
 
-.provider-tabs { grid-template-columns: repeat(4, 1fr); }
+.provider-tabs { grid-template-columns: repeat(5, 1fr); }
 .provider-tab { flex-wrap: wrap; row-gap: 3px; }
+.outloud-status {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 38px; padding: 9px 12px; margin-bottom: 2px;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--surface-2);
+  font-size: 11.5px; color: var(--ink-2);
+}
+.outloud-status svg { width: 14px; height: 14px; flex: none; color: var(--ok); }
+.outloud-status.is-off { color: var(--ink-3); }
+.outloud-status.is-off svg { color: var(--ink-3); }
+.outloud-status .busy-dot { width: 13px; height: 13px; border-width: 1.5px; }
+.outloud-refresh { margin-left: auto; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); font-size: 10px; color: var(--ink-2); background: var(--surface); }
+.outloud-refresh:hover { background: var(--surface-3); color: var(--ink); }
 .detail-cover .book-cover { width: 92px; }
 .mark-group-head h3,
 .mark-group-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }

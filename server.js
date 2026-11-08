@@ -51,7 +51,7 @@ const SECURITY_HEADERS = {
     "img-src 'self' data: blob:",
     "font-src 'self'",
     "media-src 'self' blob:",
-    "connect-src 'self' https://api.openai.com https://api.elevenlabs.io",
+    "connect-src 'self' https://api.openai.com https://api.elevenlabs.io http://127.0.0.1:51730 http://localhost:51730",
     "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'none'",
@@ -161,6 +161,16 @@ function httpsRequest({ hostname, path: reqPath, method = 'POST', headers, body,
   });
 }
 
+function localRequest({ hostname = '127.0.0.1', port = 51730, path: reqPath, method = 'GET', headers, body, timeout = 45000 }) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ hostname, port, path: reqPath, method, headers }, resolve);
+    req.setTimeout(timeout, () => req.destroy(new Error('Out Loud took too long to respond.')));
+    req.on('error', reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
 function collect(stream, limit = 16 * 1024) {
   return new Promise(resolve => {
     let text = '';
@@ -208,13 +218,44 @@ async function handleTTS(req, res) {
   const key = String(payload.key || '').trim();
   const text = cleanText(payload.text, provider === 'elevenlabs' ? 5000 : 4000);
   const speed = clampNumber(payload.speed, 0.25, 4, 1);
+  const isOutLoud = provider === 'outloud';
 
-  if (!key || key.length < 12 || key.length > 300 || /[\s]/.test(key)) {
+  if (!isOutLoud && (!key || key.length < 12 || key.length > 300 || /[\s]/.test(key))) {
     return sendJSON(res, 400, { error: 'Add a valid API key in Voice settings.' });
   }
   if (!text) return sendJSON(res, 400, { error: 'There is no text to read.' });
 
   try {
+    if (provider === 'outloud') {
+      const voice = String(payload.voice || 'af_heart').trim();
+      if (!/^[A-Za-z0-9_*+.\- ]{1,200}$/.test(voice)) {
+        return sendJSON(res, 400, { error: 'Choose a valid Out Loud voice.' });
+      }
+      const body = JSON.stringify({
+        voice,
+        input: text,
+        speed: clampNumber(payload.speed, 0.5, 2, 1),
+        response_format: 'mp3',
+      });
+      let upstream;
+      try {
+        upstream = await localRequest({
+          path: '/api/v1/audio/speech',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+            'Accept': 'audio/mpeg',
+          },
+          body,
+          timeout: 90000,
+        });
+      } catch {
+        return sendJSON(res, 503, { error: 'Out Loud isn’t running. Open the Out Loud app, then try again.' });
+      }
+      return pipeAudio(upstream, res, 'Out Loud');
+    }
+
     if (provider === 'openai') {
       const voice = OPENAI_VOICES.has(payload.voice) ? payload.voice : 'nova';
       const model = OPENAI_MODELS.has(payload.model) ? payload.model : 'gpt-4o-mini-tts';
@@ -284,7 +325,7 @@ async function pipeAudio(upstream, res, label) {
     let message = `${label} returned an error (${status}).`;
     try {
       const data = JSON.parse(raw);
-      const detail = data?.error?.message || data?.detail?.message || data?.detail || data?.message;
+      const detail = data?.error?.message || data?.detail?.message || data?.detail || data?.message || (typeof data?.error === 'string' ? data.error : null);
       if (typeof detail === 'string' && detail.trim()) message = detail.trim().slice(0, 400);
     } catch {
       if (raw && raw.length < 300 && !raw.includes('<')) message = raw.trim();
@@ -304,6 +345,30 @@ async function pipeAudio(upstream, res, label) {
   res.on('close', () => { try { upstream.destroy(); } catch {} });
 }
 
+async function handleOutLoudVoices(req, res) {
+  if (req.method !== 'GET') return sendJSON(res, 405, { error: 'Use GET.' });
+  try {
+    const upstream = await localRequest({
+      path: '/api/v1/audio/voices',
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      timeout: 4000,
+    });
+    if ((upstream.statusCode || 500) >= 400) {
+      return sendJSON(res, 503, { error: 'Out Loud is not ready yet.' });
+    }
+    const raw = await collect(upstream, 2 * 1024 * 1024);
+    res.writeHead(200, {
+      ...SECURITY_HEADERS,
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+    res.end(raw);
+  } catch {
+    return sendJSON(res, 503, { error: 'Out Loud is not running on port 51730. Open the Out Loud app first.' });
+  }
+}
+
 /* ── Server ──────────────────────────────────────────────────────── */
 
 const server = http.createServer((req, res) => {
@@ -316,6 +381,7 @@ const server = http.createServer((req, res) => {
 
   if (urlPath === '/api/health') return sendJSON(res, 200, { ok: true, app: "Alya's Reader" });
   if (urlPath === '/api/tts') return handleTTS(req, res);
+  if (urlPath === '/api/outloud/voices') return handleOutLoudVoices(req, res);
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return send(res, 405, 'Method not allowed', { Allow: 'GET, HEAD' });

@@ -48,6 +48,7 @@ const DEFAULTS = {
     instructions: 'Warm, clear audiobook narration. Unhurried but engaged.',
     elevenKey: '',
     elevenVoice: '21m00Tcm4TlvDq8ikWAM',
+    outloudVoice: 'af_heart',
     elevenModel: 'eleven_multilingual_v2',
   },
 };

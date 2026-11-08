@@ -13,7 +13,7 @@ Requires Node.js 18 or newer. There are **no npm dependencies** — the browser 
 
 **Live site:** https://hidzirtawin.github.io/alyas-reader/
 
-The hosted build is static. System voices work everywhere, and ElevenLabs can be called directly from the browser. OpenAI is most reliable through the local server: OpenAI’s browser CORS support is inconsistent for error responses, so the hosted site may not surface a useful key error. The local server adds a proxy for both providers, keeping the key on your device.
+The hosted build is static. System voices work everywhere, Out Loud can be reached on localhost (Chromium usually allows this), and ElevenLabs can be called directly from the browser. OpenAI is most reliable through the local server: OpenAI’s browser CORS support is inconsistent for error responses. The local server adds a proxy for cloud providers and Out Loud, keeping things local.
 
 ---
 
@@ -46,6 +46,16 @@ Alya’s Reader lists the English voices installed on your device. On macOS, mor
 Download any “Enhanced” or “Premium” English voice; it will appear in Alya’s Reader after a reload.
 
 Speed (0.5×–2×), pitch and highlight-while-reading are adjustable.
+
+### Out Loud voices (free, local, recommended)
+
+Alya’s Reader can use [Out Loud](https://github.com/light-cloud-com/out-loud), a free, source-available, offline desktop TTS app built on Kokoro-82M. It exposes a local API on `127.0.0.1:51730`.
+
+1. Install and open Out Loud from its [releases page](https://github.com/light-cloud-com/out-loud/releases/latest).
+2. In Alya’s Reader, open **Voice settings → Out Loud**.
+3. Choose a voice (or enter a blend such as `af_heart*0.6 + am_michael*0.4`) and save.
+
+Voices are generated on your computer and never leave it. The hosted GitHub Pages build can usually reach Out Loud through the browser; if your browser blocks localhost access, use the local version of Alya’s Reader. Out Loud is a separate project licensed **PolyForm Noncommercial 1.0.0**; no Out Loud code is bundled here. For commercial use, check its license.
 
 ### Neural voices (optional)
 
@@ -144,6 +154,7 @@ public/
 - [Mammoth](https://github.com/mwilliamson/mammoth.js) (BSD-2-Clause) — DOCX conversion
 - [JSZip](https://stuk.github.io/jszip/) (MIT) — EPUB and CBZ container parsing
 - [libarchive.js](https://github.com/nika-begiashvili/libarchivejs) (MIT; WASM port of libarchive) — CBR/RAR extraction
+- [Out Loud](https://github.com/light-cloud-com/out-loud) by Light Cloud Labs (PolyForm Noncommercial 1.0.0) — optional local Kokoro-82M voice engine, used via its HTTP API
 - Typefaces: Literata, Atkinson Hyperlegible, Inter and Fraunces (SIL Open Font License), served locally from Fontsource builds.
 
 Built for quiet afternoons and long train rides.

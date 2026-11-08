@@ -6,7 +6,8 @@ import {
 } from './prefs.js';
 import {
   englishVoices, findVoice, previewSpeech, stopPreview, describeVoice,
-  ELEVEN_PRESETS,
+  ELEVEN_PRESETS, fetchOutLoudVoices, cachedOutLoudVoices,
+  OUTLOUD_DEFAULT_VOICE,
 } from './tts.js';
 import {
   modal, toast, confirmDialog,
@@ -28,7 +29,9 @@ export function renderSettings(app) {
   const voiceSub = tts.enabled
     ? (tts.provider === 'system'
       ? 'Free · reads on this device'
-      : tts.provider === 'openai' ? 'Neural · OpenAI API key' : 'Neural · ElevenLabs API key')
+      : tts.provider === 'outloud'
+        ? 'Kokoro · local · offline'
+        : tts.provider === 'openai' ? 'Neural · OpenAI API key' : 'Neural · ElevenLabs API key')
     : 'Text only · no narration';
 
   view.innerHTML = `
@@ -109,7 +112,7 @@ export function renderSettings(app) {
               </label>
               <div style="margin-top:14px"><button class="btn btn-sm" data-preview-voice>${icon('volume')} Hear a sample</button></div>
             </div>
-            <p class="hint">System voices are free and instant. OpenAI and ElevenLabs voices need an API key, stored only in this browser and sent only to the provider you choose.</p>
+            <p class="hint">System voices are free and instant. <strong>Out Loud</strong> adds free, offline Kokoro voices when its desktop app is running. OpenAI and ElevenLabs voices need an API key, stored only in this browser.</p>
           </div>
         </section>
       </div>
@@ -344,6 +347,7 @@ export function openVoiceModal({ onSaved } = {}) {
       <button class="provider-tab" data-tab="system" role="tab">${icon('volume')} System</button>
       <button class="provider-tab" data-tab="openai" role="tab">${icon('sparkles')} OpenAI <span class="tag">AI</span></button>
       <button class="provider-tab" data-tab="elevenlabs" role="tab">${icon('mic')} ElevenLabs <span class="tag">AI</span></button>
+      <button class="provider-tab" data-tab="outloud" role="tab">${icon('headphones')} Out Loud <span class="tag">Local</span></button>
     </div>
     <div id="voiceTabBody"></div>
     <div class="divider" style="margin:18px 0 14px"></div>
@@ -357,7 +361,7 @@ export function openVoiceModal({ onSaved } = {}) {
         <span class="track"></span><span class="switch-label">Highlight the sentence being read</span>
       </label>
     </div>
-    <div class="callout" style="margin-top:16px">${icon('shield')}<span>Voice keys are stored only in this browser. Locally they pass through this app’s own proxy; on a hosted site they go directly to the provider over HTTPS. They are never sent anywhere else.</span></div>
+    <div class="callout" style="margin-top:16px">${icon('shield')}<span>Voice keys are stored only in this browser. Locally they pass through this app’s own proxy; on a hosted site they go directly to the provider over HTTPS. Out Loud voices never leave your computer. Out Loud is a separate, source-available app licensed for non-commercial use.</span></div>
   `;
 
   const foot = document.createElement('div');
@@ -388,6 +392,42 @@ export function openVoiceModal({ onSaved } = {}) {
     syncTabLabels();
     const previewBtn = tabBody.querySelector('[data-preview]');
     previewBtn?.addEventListener('click', () => testVoice(previewBtn));
+    if (tab === 'outloud') hydrateOutLoud();
+  }
+
+  async function hydrateOutLoud(force = false) {
+    const status = tabBody.querySelector('#outloudStatus');
+    const list = tabBody.querySelector('#outloudVoices');
+    if (!status || !list) return;
+    const cached = force ? null : cachedOutLoudVoices();
+    if (cached?.length) renderOutLoudList(cached, status, list, true);
+    try {
+      const voices = await fetchOutLoudVoices({ force: force || !cached?.length });
+      if (tab !== 'outloud') return;
+      renderOutLoudList(voices, status, list, true);
+    } catch {
+      if (tab !== 'outloud') return;
+      status.innerHTML = `${icon('info')}<span>Out Loud not detected</span><button class="outloud-refresh" type="button" data-outloud-refresh>Check again</button>`;
+      status.classList.add('is-off');
+      list.innerHTML = `<div class="voice-none">Start the <a href="https://github.com/light-cloud-com/out-loud/releases/latest" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Out Loud</a> desktop app, then choose “Check again”. If your browser blocks localhost access on the hosted site, use the local version.</div>`;
+    }
+  }
+
+  function renderOutLoudList(voices, status, list, connected) {
+    if (connected) {
+      status.classList.remove('is-off');
+      status.innerHTML = `${icon('check')}<span>Connected · ${voices.length} ${voices.length === 1 ? 'voice' : 'voices'}</span><button class="outloud-refresh" type="button" data-outloud-refresh>Refresh</button>`;
+    }
+    const active = draft.outloudVoice || OUTLOUD_DEFAULT_VOICE;
+    list.innerHTML = `<div class="voice-list">${voices.map(v => `
+      <button class="voice-opt${v.id === active ? ' is-active' : ''}" data-outloud-voice="${esc(v.id)}">
+        <span class="playing-dot"></span>
+        <span class="vname">${esc(v.name || v.id)}</span>
+        <span class="vlang">${esc(v.lang || '')}</span>
+        <span class="vtag">${esc(v.engine || 'kokoro')}</span>
+      </button>`).join('')}</div>`;
+    const input = tabBody.querySelector('#vmOutloudVoice');
+    if (input) input.value = active;
   }
 
   function syncTabLabels() {
@@ -470,6 +510,23 @@ export function openVoiceModal({ onSaved } = {}) {
           <div><button class="btn btn-sm" data-preview>${icon('sparkles')} Preview voice</button></div>
         </div>`;
     }
+    if (which === 'outloud') {
+      return `
+        <div class="field" style="margin-bottom:14px">
+          <label>Out Loud voices <span class="dim" style="font-weight:400">· local Kokoro-82M</span></label>
+          <div class="outloud-status" id="outloudStatus"><span class="busy-dot"></span><span>Looking for Out Loud…</span></div>
+          <p class="hint">Free, 100% offline voices. Install and open <a href="https://github.com/light-cloud-com/out-loud/releases/latest" target="_blank" rel="noopener noreferrer">Out Loud</a>; it must be running on this computer while you listen.</p>
+        </div>
+        <div id="outloudVoices"><div class="voice-none">Checking for the Out Loud app…</div></div>
+        <div class="slider-line" style="margin-top:12px"><span style="font-size:11px;width:84px;color:var(--ink-3)">Speed</span><input class="range" id="vmRate" type="range" min="0.5" max="2" step="0.05" value="${draft.rate}"><output id="vmRateOut">${draft.rate.toFixed(2)}×</output></div>
+        <div class="field" style="margin-top:12px">
+          <label for="vmOutloudVoice">Voice or blend</label>
+          <input class="input" id="vmOutloudVoice" style="font-size:12px" value="${esc(draft.outloudVoice || OUTLOUD_DEFAULT_VOICE)}" placeholder="af_heart or af_heart*0.7 + af_bella*0.3">
+          <span class="hint">You can blend voices, e.g. <code>af_heart*0.6 + am_michael*0.4</code>.</span>
+        </div>
+        <div style="margin-top:14px"><button class="btn btn-sm" data-preview>${icon('headphones')} Preview voice</button></div>`;
+    }
+
     // elevenlabs
     return `
       <div class="form-stack">
@@ -511,6 +568,7 @@ export function openVoiceModal({ onSaved } = {}) {
     if (tab === 'system' && !probe.voiceURI) probe.voiceURI = englishVoices()[0]?.voiceURI || '';
     if (tab === 'openai' && !draft.openaiKey) { toast('Add your OpenAI API key to preview this voice.', 'err'); return; }
     if (tab === 'elevenlabs' && !draft.elevenKey) { toast('Add your ElevenLabs API key to preview this voice.', 'err'); return; }
+    if (tab === 'outloud' && !draft.outloudVoice) draft.outloudVoice = OUTLOUD_DEFAULT_VOICE;
     btn.disabled = true;
     const old = btn.innerHTML;
     btn.innerHTML = '<span class="busy-dot"></span> Generating…';
@@ -531,6 +589,10 @@ export function openVoiceModal({ onSaved } = {}) {
       renderTabs();
       return;
     }
+    if (e.target.closest('[data-outloud-refresh]')) {
+      hydrateOutLoud(true);
+      return;
+    }
     const voiceBtn = e.target.closest('[data-voice-uri]');
     if (voiceBtn) {
       draft.voiceURI = voiceBtn.dataset.voiceUri;
@@ -549,6 +611,14 @@ export function openVoiceModal({ onSaved } = {}) {
       tabBody.querySelectorAll('[data-el-voice]').forEach(b => b.classList.toggle('is-active', b === el));
       const input = tabBody.querySelector('#vmElevenVoice');
       if (input) input.value = draft.elevenVoice;
+      return;
+    }
+    const ol = e.target.closest('[data-outloud-voice]');
+    if (ol) {
+      draft.outloudVoice = ol.dataset.outloudVoice;
+      tabBody.querySelectorAll('[data-outloud-voice]').forEach(b => b.classList.toggle('is-active', b === ol));
+      const input = tabBody.querySelector('#vmOutloudVoice');
+      if (input) input.value = draft.outloudVoice;
       return;
     }
     const toggle = e.target.closest('[data-toggle-key]');
@@ -572,6 +642,7 @@ export function openVoiceModal({ onSaved } = {}) {
     else if (id === 'vmElevenKey') draft.elevenKey = e.target.value.trim();
     else if (id === 'vmInstructions') draft.instructions = e.target.value;
     else if (id === 'vmElevenVoice') draft.elevenVoice = e.target.value.trim();
+    else if (id === 'vmOutloudVoice') draft.outloudVoice = e.target.value.trim() || OUTLOUD_DEFAULT_VOICE;
   });
 
   body.addEventListener('change', e => {

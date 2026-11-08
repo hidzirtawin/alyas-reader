@@ -137,10 +137,50 @@ export function piperProgressLabel(p = piperProgress) {
   return '';
 }
 
+/* Audiobook-style presets built from original Piper voices. These are not
+   clones of Audible, Libby or OverDrive narrators — those are human or
+   proprietary voices. The LibriVox preset uses LibriTTS, a model trained
+   on LibriVox volunteer audiobook recordings. */
+export const PIPER_PRESETS = [
+  {
+    id: 'audiobook-warm', name: 'Audiobook · Warm', voiceId: 'en_US-lessac-high',
+    speaker: 0, rate: 0.95, desc: 'Measured, warm American female narration.',
+  },
+  {
+    id: 'audiobook-classic', name: 'Audiobook · Classic', voiceId: 'en_US-ryan-high',
+    speaker: 0, rate: 0.95, desc: 'Deep, unhurried American male narrator.',
+  },
+  {
+    id: 'audiobook-british', name: 'Audiobook · British', voiceId: 'en_GB-alan-medium',
+    speaker: 0, rate: 0.95, desc: 'Dry British male voice for classic fiction.',
+  },
+  {
+    id: 'audiobook-studio', name: 'Audiobook · Studio', voiceId: 'en_GB-cori-high',
+    speaker: 0, rate: 0.97, desc: 'Crisp British female studio read.',
+  },
+  {
+    id: 'studio-female', name: 'Studio · American', voiceId: 'en_US-hfc_female-medium',
+    speaker: 0, rate: 1, desc: 'Bright, modern American female voice.',
+  },
+  {
+    id: 'studio-male', name: 'Studio · American male', voiceId: 'en_US-hfc_male-medium',
+    speaker: 0, rate: 1, desc: 'Clear, neutral American male voice.',
+  },
+  {
+    id: 'librivox', name: 'LibriVox-style', tag: 'LibriVox',
+    voiceId: 'en_US-libritts_r-medium', speaker: 0, rate: 0.96,
+    desc: 'Trained on LibriVox audiobooks · 2,306 speakers.',
+  },
+];
+
 export function piperSpeakerName(voice, speaker = 0) {
   if (!voice || voice.num_speakers <= 1) return '';
   const entry = Object.entries(voice.speaker_id_map || {}).find(([, id]) => Number(id) === Number(speaker));
-  if (entry) return entry[0].replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  if (entry) {
+    const raw = String(entry[0]);
+    if (/^p?\d+$/i.test(raw)) return `Voice ${raw.replace(/^p/i, '')}`;
+    return raw.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
   return `Speaker ${speaker}`;
 }
 

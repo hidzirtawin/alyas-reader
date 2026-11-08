@@ -1200,6 +1200,29 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
 .provider-tab svg { width: 14px; height: 14px; }
 .provider-tab.is-active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); font-weight: 600; }
 .provider-tab .tag { font-size: 8px; padding: 1px 5px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.presets-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 7px; font-size: 10.5px; font-weight: 600;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3);
+}
+.presets-head .dim { letter-spacing: 0; text-transform: none; font-weight: 400; }
+.preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.preset {
+  text-align: left; padding: 9px 11px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface);
+  transition: border-color .15s, background .15s;
+}
+.preset:hover { border-color: var(--accent); background: var(--accent-softer); }
+.preset.is-active { border-color: var(--accent); background: var(--accent-soft); }
+.preset-name { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; line-height: 1.25; }
+.preset-name em {
+  font-style: normal; font-size: 8px; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--accent);
+  background: var(--accent-soft); padding: 1px 5px; border-radius: 999px;
+}
+.preset-desc { display: block; margin-top: 2px; font-size: 10px; line-height: 1.35; color: var(--ink-3); }
+.preset-note { margin-top: 8px; font-size: 10px; line-height: 1.55; color: var(--ink-3); }
+@media (max-width: 520px) { .preset-grid { grid-template-columns: 1fr; } }
 .voice-list { display: flex; flex-direction: column; gap: 3px; max-height: 260px; overflow-y: auto; padding-right: 4px; }
 .voice-opt { display: flex; align-items: center; gap: 11px; padding: 9px 11px; border-radius: 8px; text-align: left; width: 100%; transition: background .14s; }
 .voice-opt:hover { background: var(--surface-2); }
@@ -1497,6 +1520,7 @@ kbd { font-family: var(--font-ui); font-size: 10px; font-weight: 600; min-width:
   background: var(--surface-2); border: 1px solid var(--line);
   font-size: 11px; line-height: 1.5; color: var(--ink-2);
 }
+.speaker-count { font-size: 10px; color: var(--ink-3); margin: 2px 0 5px; }
 .voice-progress { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
 .voice-progress[hidden] { display: none; }
 .voice-progress-track {

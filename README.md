@@ -46,12 +46,13 @@ Alya’s Reader runs [Piper](https://github.com/rhasspy/piper) (MIT) entirely in
 - Multi-speaker models with a speaker picker
 - Adjustable speed and a **pause-between-sentences** control for natural reading rhythm
 - A live **download progress bar** (percent and megabytes) in the voice picker and the reading dock
+- **Audiobook-style presets** for warm, classic, British and studio narration, plus a **LibriVox-style** LibriTTS voice trained on volunteer audiobook recordings
 
 The first time you use a voice, its model is downloaded from Hugging Face and stored in the browser. Models range from about 20 MB to 115 MB; after that the voice works offline. No account or API key is involved, and your book text never leaves your device.
 
 The Australian voice is a community LibriVox model by DataCraftsmanAustralia, licensed **CC-BY-4.0**. Its ten speakers are available in the speaker picker.
 
-**Not included:** a Texas-drawl preset and celebrity voice clones. The open Piper catalog does not contain a licensed Texas voice, and unauthorized celebrity impersonations are intentionally excluded. Character voices are original Piper voices.
+**Not included:** a Texas-drawl preset, celebrity clones, or the proprietary narrators used by Audible, Libby and OverDrive. Those narrators are human or licensed voices, and unauthorized impersonations are intentionally excluded. The audiobook presets are original Piper voices chosen for a similar feel.
 
 ### System voices (free)
 
@@ -73,7 +74,8 @@ Comic books are always silent because their pages are images; the Listen control
 
 - public-domain libraries such as Project Gutenberg, Standard Ebooks, Internet Archive, Open Library and Planet eBook
 - free and discounted books from BookBoon, Smashwords, Obooko and Open Culture
-- audiobooks and catalogues such as LibriVox, Goodreads, BookBub and Google Books
+- audiobooks and catalogues such as LibriVox, Audible, Goodreads, BookBub and Google Books
+- library borrowing through Libby and OverDrive with a library card
 
 Every link opens in a new tab. Browsers cannot see files downloaded by another tab, so when you return,
 Alya's Reader offers to add the file you just downloaded — choose it once and it joins your library.

@@ -112,6 +112,12 @@ const GROUPS = [
         desc: 'Volunteer-read public-domain audiobooks, free to download.',
       },
       {
+        name: 'Audible',
+        url: 'https://www.audible.com',
+        host: 'audible.com',
+        desc: 'Subscription audiobooks read by professional human narrators.',
+      },
+      {
         name: 'Goodreads',
         url: 'https://www.goodreads.com',
         host: 'goodreads.com',
@@ -134,6 +140,24 @@ const GROUPS = [
         url: 'https://freecomputerbooks.com',
         host: 'freecomputerbooks.com',
         desc: 'Free programming, maths and computer-science ebooks.',
+      },
+    ],
+  },
+  {
+    title: 'Borrow with a library card',
+    blurb: 'Free library loans of ebooks and audiobooks, including human narration.',
+    items: [
+      {
+        name: 'Libby',
+        url: 'https://libbyapp.com',
+        host: 'libbyapp.com',
+        desc: 'Borrow ebooks and audiobooks from your local library with a card.',
+      },
+      {
+        name: 'OverDrive',
+        url: 'https://www.overdrive.com',
+        host: 'overdrive.com',
+        desc: 'Find your library’s digital collection and borrow on any device.',
       },
     ],
   },

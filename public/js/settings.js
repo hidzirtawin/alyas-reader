@@ -9,7 +9,7 @@ import {
 import {
   englishVoices, findVoice, previewSpeech, stopPreview, describeVoice,
   getPiperVoices, loadPiperCatalog, piperVoiceById, piperSpeakerName,
-  onPiperProgress, piperProgressLabel,
+  PIPER_PRESETS, onPiperProgress, piperProgressLabel,
 } from './tts.js';
 import {
   modal, toast, confirmDialog,
@@ -449,7 +449,17 @@ export async function openVoiceModal({ onSaved } = {}) {
     const selected = piperVoiceById(draft.piperVoice);
     const languages = [...new Set(all.map(v => v.language).filter(Boolean))].sort((a, b) => (a === 'English' ? -1 : b === 'English' ? 1 : a.localeCompare(b)));
     return `
-      <div class="field" style="margin-bottom:10px">
+      <div class="presets">
+        <div class="presets-head"><span>Narration styles</span><span class="dim">Audiobook-inspired</span></div>
+        <div class="preset-grid">
+          ${PIPER_PRESETS.map(p => `<button class="preset${p.voiceId === draft.piperVoice && Number(p.speaker || 0) === Number(draft.piperSpeaker || 0) ? ' is-active' : ''}" data-preset="${esc(p.id)}">
+            <span class="preset-name">${esc(p.name)}${p.tag ? `<em>${esc(p.tag)}</em>` : ''}</span>
+            <span class="preset-desc">${esc(p.desc)}</span>
+          </button>`).join('')}
+        </div>
+        <p class="preset-note">Audible, Libby and OverDrive narrators are human or proprietary. These presets use original open Piper voices with a similar audiobook feel — no narrator is cloned. <strong>LibriVox-style</strong> uses LibriTTS, trained on volunteer LibriVox recordings.</p>
+      </div>
+      <div class="field" style="margin-bottom:10px;margin-top:12px">
         <label>Piper voices <span class="dim" style="font-weight:400">· ${all.length} voices · free · offline</span></label>
         <div style="display:flex;gap:8px;margin-top:2px">
           <input class="input" id="vmPiperSearch" placeholder="Search voices" style="flex:1;height:34px" autocomplete="off">
@@ -468,7 +478,7 @@ export async function openVoiceModal({ onSaved } = {}) {
         <div class="voice-progress-track"><i id="voiceProgressFill"></i></div>
         <span class="voice-progress-text" id="voiceProgressText">Downloading voice…</span>
       </div>
-      <p class="hint" style="margin-top:10px">The first preview loads the model; it can take a minute. Later sentences are generated while the previous one is playing. Australian English is a community model. Texas drawl isn’t available in the open voice set; celebrity voice clones are not included. Sources: <a href="https://github.com/rhasspy/piper" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">rhasspy/piper</a> · <a href="https://huggingface.co/rhasspy/piper-voices" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">voice models</a>.</p>`;
+      <p class="hint" style="margin-top:10px">The first preview loads the model and shows live progress; later sentences are generated while the previous one plays. Australian English is a community model. Texas drawl isn’t available in the open voice set; celebrity and platform narrator clones are not included. Sources: <a href="https://github.com/rhasspy/piper" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">rhasspy/piper</a> · <a href="https://huggingface.co/rhasspy/piper-voices" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">voice models</a>.</p>`;
   }
 
   function renderPiperList() {
@@ -511,13 +521,41 @@ export async function openVoiceModal({ onSaved } = {}) {
     const v = piperVoiceById(draft.piperVoice);
     if (!v || v.num_speakers <= 1) { wrap.innerHTML = ''; return; }
     const entries = Object.entries(v.speaker_id_map || {}).sort((a, b) => Number(a[1]) - Number(b[1]));
-    const options = entries.length ? entries : Array.from({ length: v.num_speakers }, (_, i) => [`Speaker ${i}`, i]);
+    const list = entries.length ? entries : Array.from({ length: v.num_speakers }, (_, i) => [`Speaker ${i}`, i]);
+    const many = list.length > 80;
+    const selectedId = Number(draft.piperSpeaker) || 0;
+    const label = raw => {
+      const text = String(raw);
+      return /^p?\d+$/i.test(text)
+        ? `Voice ${text.replace(/^p/i, '')}`
+        : text.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    };
     wrap.innerHTML = `<div class="field" style="margin:4px 0 12px">
-      <label for="vmPiperSpeaker">Speaker <span class="dim" style="font-weight:400">· ${v.num_speakers} available</span></label>
-      <select class="select" id="vmPiperSpeaker">
-        ${options.map(([name, id]) => `<option value="${Number(id)}"${Number(id) === Number(draft.piperSpeaker) ? ' selected' : ''}>${esc(String(name).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))}</option>`).join('')}
-      </select>
+      <label for="vmPiperSpeaker">Speaker <span class="dim" style="font-weight:400">· ${list.length.toLocaleString()} available</span></label>
+      ${many ? `<input class="input" id="vmPiperSpeakerSearch" placeholder="Search ${list.length.toLocaleString()} speakers" autocomplete="off" style="height:34px;margin-bottom:6px">
+      <div class="speaker-count" id="vmPiperSpeakerCount"></div>` : ''}
+      <select class="select" id="vmPiperSpeaker"></select>
     </div>`;
+
+    const select = wrap.querySelector('#vmPiperSpeaker');
+    const search = wrap.querySelector('#vmPiperSpeakerSearch');
+    const count = wrap.querySelector('#vmPiperSpeakerCount');
+    const fill = (query = '') => {
+      const q = query.trim().toLowerCase();
+      let matches = q ? list.filter(([name, id]) => `${label(name)} ${id}`.toLowerCase().includes(q)) : list;
+      const current = list.find(([, id]) => Number(id) === selectedId);
+      if (current && !matches.some(([, id]) => Number(id) === selectedId)) matches = [current, ...matches];
+      const limit = q ? 80 : (many ? 60 : matches.length);
+      const shown = matches.slice(0, limit);
+      select.innerHTML = shown.map(([name, id]) => `<option value="${Number(id)}"${Number(id) === selectedId ? ' selected' : ''}>${esc(label(name))}</option>`).join('');
+      if (count) {
+        count.textContent = q
+          ? `${matches.length} matching speaker${matches.length === 1 ? '' : 's'}${matches.length > limit ? ` · showing first ${limit}` : ''}`
+          : `Showing first ${shown.length} of ${list.length.toLocaleString()} — type to narrow.`;
+      }
+    };
+    fill('');
+    search?.addEventListener('input', () => fill(search.value));
   }
 
   function updatePiperNote() {
@@ -580,6 +618,17 @@ export async function openVoiceModal({ onSaved } = {}) {
       draft.piperVoice = piperBtn.dataset.piperVoice;
       draft.piperSpeaker = 0;
       renderPiperList();
+      return;
+    }
+    const presetBtn = e.target.closest('[data-preset]');
+    if (presetBtn) {
+      const preset = PIPER_PRESETS.find(p => p.id === presetBtn.dataset.preset);
+      if (preset) {
+        draft.piperVoice = preset.voiceId;
+        draft.piperSpeaker = Number(preset.speaker || 0);
+        draft.rate = Number(preset.rate ?? draft.rate);
+        renderTabs();
+      }
     }
   });
 

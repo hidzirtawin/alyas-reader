@@ -4,10 +4,10 @@ const BUILD = document.querySelector('meta[name="app-build"]')?.content || '1.0'
 
 import { db } from './db.js';
 import {
-  getPrefs, savePrefs, setReaderPrefs, FONTS, THEMES, DEFAULT_READER,
+  getPrefs, savePrefs, setReaderPrefs, FONTS, THEMES, DEFAULT_READER, DYSLEXIA_READER,
 } from './prefs.js';
 import {
-  englishVoices, findVoice, previewSpeech, stopPreview, describeVoice,
+  previewSpeech, stopPreview, describeVoice,
   getPiperVoices, loadPiperCatalog, piperVoiceById, piperSpeakerName,
   PIPER_PRESETS, onPiperProgress, piperProgressLabel,
 } from './tts.js';
@@ -29,7 +29,7 @@ export function renderSettings(app) {
   const usedPct = storage.quota ? clamp((storage.used / storage.quota) * 100, 0.5, 100) : 0;
   const voiceName = describeVoice();
   const voiceSub = tts.enabled
-    ? (tts.provider === 'system' ? 'Free · your device’s voices' : 'Piper · free · offline neural voice')
+    ? 'Piper · free · offline neural voice'
     : 'Text only · no narration';
 
   view.innerHTML = `
@@ -58,12 +58,11 @@ export function renderSettings(app) {
             </div>
             <div>
               <div class="field-label" style="margin-bottom:9px">Typeface</div>
-              <div class="font-options">
-                ${FONTS.map(f => `
-                  <button class="font-btn${r.font === f.id ? ' is-active' : ''}" data-set-font="${f.id}" aria-pressed="${r.font === f.id}">
-                    <span class="aa" style="font-family:${f.stack}">Aa</span>
-                    <span class="nm">${f.name}</span>
-                  </button>`).join('')}
+              <div class="font-picker">
+                <span class="font-aa" style="font-family:${(FONTS.find(f => f.id === r.font) || FONTS[0]).stack}">Aa</span>
+                <select class="select" id="setFont" aria-label="Typeface">
+                  ${FONTS.map(f => `<option value="${f.id}"${r.font === f.id ? ' selected' : ''}>${esc(f.name)} — ${esc(f.note)}</option>`).join('')}
+                </select>
               </div>
             </div>
             <div>
@@ -80,7 +79,7 @@ export function renderSettings(app) {
 
         <section class="panel set-card">
           <h3>Voice &amp; narration</h3>
-          <p class="set-desc">Listen with a free offline neural voice, your device’s voices, or read silently.</p>
+          <p class="set-desc">Listen with a free offline audiobook-style voice, or read silently.</p>
           <div class="set-body">
             <div class="set-row">
               <div>
@@ -110,9 +109,13 @@ export function renderSettings(app) {
                 <input type="checkbox" id="setHighlight" ${tts.highlight ? 'checked' : ''}>
                 <span class="track"></span><span class="switch-label">Highlight the sentence being read</span>
               </label>
+              <label class="switch" style="margin-top:10px">
+                <input type="checkbox" id="setAutoLanguage" ${tts.autoLanguageVoice !== false ? 'checked' : ''}>
+                <span class="track"></span><span class="switch-label">Use a matching voice for non-English books</span>
+              </label>
               <div style="margin-top:14px"><button class="btn btn-sm" data-preview-voice>${icon('volume')} Hear a sample</button></div>
             </div>
-            <p class="hint"><strong>Piper</strong> voices are free and run entirely in this browser. The first use downloads an open voice model (20–115 MB) from Hugging Face, then works offline. No accounts or API keys. System voices are instant.</p>
+            <p class="hint"><strong>Piper</strong> voices are free and run entirely in this browser. The first use downloads an open voice model (20–115 MB) from Hugging Face, then works offline. No accounts or API keys.</p>
           </div>
         </section>
       </div>
@@ -122,6 +125,13 @@ export function renderSettings(app) {
           <h3>Reading comfort</h3>
           <p class="set-desc">Fine-tune the rhythm of the page.</p>
           <div class="set-body">
+            <div class="dyslexia-card">
+              <div class="dc-copy">
+                <strong>Dyslexia-friendly reading</strong>
+                <span>OpenDyslexic, roomy lines, wider spacing and left-aligned text.</span>
+              </div>
+              <button class="btn btn-sm" id="dyslexiaPreset">Apply</button>
+            </div>
             <div>
               <div class="set-row"><span class="set-label">Line height</span><output id="lhOut">${r.lineHeight.toFixed(2)}</output></div>
               <input class="range" id="setLineHeight" type="range" min="1.3" max="2.1" step="0.02" value="${r.lineHeight}" aria-label="Line height">
@@ -133,6 +143,14 @@ export function renderSettings(app) {
             <div>
               <div class="set-row"><span class="set-label">Paragraph spacing</span><output id="paraOut">${r.para.toFixed(2)} em</output></div>
               <input class="range" id="setPara" type="range" min="0.4" max="1.6" step="0.05" value="${r.para}" aria-label="Paragraph spacing">
+            </div>
+            <div>
+              <div class="set-row"><span class="set-label">Letter spacing</span><output id="letterOut">${(r.letterSpacing || 0).toFixed(3)} em</output></div>
+              <input class="range" id="setLetter" type="range" min="0" max="0.12" step="0.005" value="${r.letterSpacing || 0}" aria-label="Letter spacing">
+            </div>
+            <div>
+              <div class="set-row"><span class="set-label">Word spacing</span><output id="wordOut">${(r.wordSpacing || 0).toFixed(2)} em</output></div>
+              <input class="range" id="setWord" type="range" min="0" max="0.5" step="0.01" value="${r.wordSpacing || 0}" aria-label="Word spacing">
             </div>
             <div class="divider"></div>
             <label class="switch">
@@ -186,7 +204,7 @@ export function renderSettings(app) {
               <button class="btn btn-sm" id="showShortcuts">${icon('keyboard')} View</button>
             </div>
             <div class="divider"></div>
-            <p class="hint" style="line-height:1.65">EPUB rendering, PDF.js, Mammoth and JSZip run entirely on your device. Natural narration uses <strong>Piper</strong> (MIT, from rhasspy/piper) running locally in your browser, or your operating system’s voices. No accounts or API keys.</p>
+            <p class="hint" style="line-height:1.65">EPUB rendering, PDF.js, Mammoth and JSZip run entirely on your device. Natural narration uses <strong>Piper</strong> (MIT, from rhasspy/piper) running locally in your browser. No accounts or API keys.</p>
             <p class="hint">Alya’s Reader · build ${BUILD}</p>
           </div>
         </section>
@@ -206,8 +224,6 @@ function fontName(id) {
 function onSettingsClick(app, e) {
   const theme = e.target.closest('[data-set-theme]');
   if (theme) { savePrefs({ theme: theme.dataset.setTheme }); renderSettings(app); return; }
-  const font = e.target.closest('[data-set-font]');
-  if (font) { setReaderPrefs({ font: font.dataset.setFont }); renderSettings(app); return; }
 
   if (e.target.closest('[data-open-voice]')) {
     openVoiceModal({ onSaved: () => renderSettings(app) });
@@ -227,6 +243,12 @@ function onSettingsClick(app, e) {
     previewSpeech(getPrefs().tts)
       .catch(err => toast(err.message || 'Could not play the sample.', 'err'))
       .finally(() => { stopProgress(); btn.disabled = false; btn.innerHTML = old; });
+    return;
+  }
+  if (e.target.closest('#dyslexiaPreset')) {
+    setReaderPrefs(DYSLEXIA_READER);
+    renderSettings(app);
+    toast('Dyslexia-friendly reading on', 'ok');
     return;
   }
   if (e.target.closest('#resetReader')) {
@@ -283,6 +305,18 @@ function onSettingsInput(app, e) {
     $('#paraOut').textContent = `${v.toFixed(2)} em`;
     return;
   }
+  if (id === 'setLetter') {
+    const v = Number(e.target.value);
+    setReaderPrefs({ letterSpacing: v });
+    $('#letterOut').textContent = `${v.toFixed(3)} em`;
+    return;
+  }
+  if (id === 'setWord') {
+    const v = Number(e.target.value);
+    setReaderPrefs({ wordSpacing: v });
+    $('#wordOut').textContent = `${v.toFixed(2)} em`;
+    return;
+  }
   if (id === 'setTtsSpeed') {
     const v = Number(e.target.value);
     savePrefs({ tts: { rate: v } }, { silent: true });
@@ -305,9 +339,11 @@ function onSettingsChange(app, e) {
     toast(e.target.checked ? 'Narration on' : 'Silent reading on', 'ok');
     return;
   }
+  if (id === 'setFont') { setReaderPrefs({ font: e.target.value }); renderSettings(app); return; }
   if (id === 'setJustify') { setReaderPrefs({ justify: e.target.checked }); return; }
   if (id === 'setHyphens') { setReaderPrefs({ hyphens: e.target.checked }); return; }
   if (id === 'setAutoAdvance') { savePrefs({ tts: { autoAdvance: e.target.checked } }, { silent: true }); return; }
+  if (id === 'setAutoLanguage') { savePrefs({ tts: { autoLanguageVoice: e.target.checked } }, { silent: true }); return; }
   if (id === 'setHighlight') { savePrefs({ tts: { highlight: e.target.checked } }, { silent: true }); return; }
 }
 
@@ -349,13 +385,12 @@ export async function openVoiceModal({ onSaved } = {}) {
   const original = getPrefs().tts;
   const draft = { ...original };
   let tab = draft.enabled ? draft.provider : 'silent';
-  if (!['piper', 'system'].includes(tab)) tab = 'piper';
+  if (tab !== 'silent') tab = 'piper';
 
   const body = document.createElement('div');
   body.innerHTML = `
     <div class="provider-tabs" role="tablist" aria-label="Narration mode">
       <button class="provider-tab" data-tab="silent" role="tab">${icon('eye-off')} Silent</button>
-      <button class="provider-tab" data-tab="system" role="tab">${icon('volume')} System</button>
       <button class="provider-tab" data-tab="piper" role="tab">${icon('headphones')} Piper <span class="tag">Free</span></button>
     </div>
     <div id="voiceTabBody"></div>
@@ -385,13 +420,12 @@ export async function openVoiceModal({ onSaved } = {}) {
   const m = modal({
     eyebrow: 'Narration',
     title: 'Choose how Alya’s Reader speaks',
-    subtitle: 'Free, offline neural voices from Piper — or your device’s own voices.',
+    subtitle: 'Free, offline neural voices from Piper — audiobook, cinema and character styles.',
     body,
     foot,
     wide: true,
     onClose: () => {
       stopPreview();
-      window.removeEventListener('lumen:voices', onVoices);
     },
   });
 
@@ -403,9 +437,6 @@ export async function openVoiceModal({ onSaved } = {}) {
     tabBody.innerHTML = tabMarkup(tab);
     const previewBtn = tabBody.querySelector('[data-preview]');
     previewBtn?.addEventListener('click', () => testVoice(previewBtn));
-    if (tab === 'system' && !draft.voiceURI) {
-      draft.voiceURI = englishVoices()[0]?.voiceURI || '';
-    }
     if (tab === 'piper') renderPiperList();
   }
 
@@ -419,29 +450,6 @@ export async function openVoiceModal({ onSaved } = {}) {
             <div><strong>Silent reading</strong><p>Bookmarks, highlights, notes, progress and every appearance control still work exactly the same.</p></div>
           </div>
         </div>`;
-    }
-
-    if (which === 'system') {
-      const voices = englishVoices();
-      return `
-        <div class="field" style="margin-bottom:14px">
-          <label>Device voice <span class="dim" style="font-weight:400">· ${voices.length} English ${voices.length === 1 ? 'voice' : 'voices'} found</span></label>
-          ${voices.length ? `<div class="voice-list">
-            ${voices.map(v => {
-              const active = v.voiceURI === draft.voiceURI || (!draft.voiceURI && v === voices[0]);
-              const enhanced = /natural|premium|enhanced|neural/i.test(v.name);
-              return `<button class="voice-opt${active ? ' is-active' : ''}" data-voice-uri="${esc(v.voiceURI)}">
-                <span class="playing-dot"></span>
-                <span class="vname">${esc(v.name)}</span>
-                <span class="vlang">${esc(v.lang)}</span>
-                ${enhanced ? '<span class="vtag">Natural</span>' : ''}
-              </button>`;
-            }).join('')}
-          </div>` : `<div class="voice-none">No system voices were found. On macOS, open <strong>System Settings → Accessibility → Spoken Content → System Voice → Manage Voices</strong> and download an English voice, then reload Alya’s Reader.</div>`}
-        </div>
-        <div class="slider-line"><span style="font-size:11px;width:84px;color:var(--ink-3)">Speed</span><input class="range" id="vmRate" type="range" min="0.5" max="2" step="0.05" value="${draft.rate}"><output id="vmRateOut">${draft.rate.toFixed(2)}×</output></div>
-        <div class="slider-line" style="margin-top:8px"><span style="font-size:11px;width:84px;color:var(--ink-3)">Pitch</span><input class="range" id="vmPitch" type="range" min="0.5" max="1.5" step="0.05" value="${draft.pitch}"><output id="vmPitchOut">${draft.pitch.toFixed(2)}</output></div>
-        <div style="margin-top:14px"><button class="btn btn-sm" data-preview>${icon('volume')} Preview voice</button></div>`;
     }
 
     // Piper — full catalog
@@ -581,7 +589,6 @@ export async function openVoiceModal({ onSaved } = {}) {
 
   async function testVoice(btn) {
     const probe = { ...draft, enabled: true, provider: tab === 'silent' ? original.provider || 'piper' : tab };
-    if (probe.provider === 'system' && !probe.voiceURI) probe.voiceURI = englishVoices()[0]?.voiceURI || '';
     if (probe.provider === 'piper' && !probe.piperVoice) probe.piperVoice = 'en_US-lessac-medium';
     if (probe.provider === 'piper') probe.piperSpeaker = draft.piperSpeaker || 0;
     btn.disabled = true;
@@ -676,8 +683,6 @@ export async function openVoiceModal({ onSaved } = {}) {
     }
   });
 
-  const onVoices = () => { if (tab === 'system') renderTabs(); };
-  window.addEventListener('lumen:voices', onVoices);
 
   foot.querySelector('[data-cancel]').onclick = () => m.close('cancel');
   foot.querySelector('[data-save]').onclick = () => {

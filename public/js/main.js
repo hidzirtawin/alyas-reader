@@ -1,14 +1,14 @@
 /* Alya’s Reader — application shell. */
 
 import { db } from './db.js';
-import { applyPrefs } from './prefs.js';
+import { applyPrefs, getPrefs } from './prefs.js';
 import { renderLibrary, importFiles, refreshImportQueue } from './library.js';
 import { renderMarks } from './bookmarks.js';
 import { renderSettings } from './settings.js';
 import { openReader, closeReader } from './reader.js';
 import { shortcutsModal, toast } from './ui.js';
 import { openBookSources, maybeOfferDownloadedBook } from './sources.js';
-import { loadPiperCatalog } from './tts.js';
+import { loadPiperCatalog, preloadPiperVoice, onPiperProgress, piperProgressLabel } from './tts.js';
 import { $, $$, clamp, formatBytes, debounce, icon } from './util.js';
 
 const app = {
@@ -260,6 +260,41 @@ window.addEventListener('focus', () => {
   maybeOfferDownloadedBook();
 });
 
+/* ── Default voice warm-up ───────────────────────────────────────── */
+let voicePill = null;
+
+function renderVoicePill(p) {
+  const active = p.phase === 'downloading' || p.phase === 'preparing';
+  if (!active || document.querySelector('#reader.is-open') || document.querySelector('.modal-backdrop')) {
+    voicePill?.remove();
+    voicePill = null;
+    return;
+  }
+  if (!voicePill) {
+    voicePill = document.createElement('div');
+    voicePill.className = 'voice-pill';
+    voicePill.setAttribute('aria-live', 'polite');
+    voicePill.innerHTML = '<span class="vp-label"></span><span class="vp-track"><i></i></span>';
+    document.body.appendChild(voicePill);
+  }
+  const pct = p.phase === 'downloading' ? p.percent : 100;
+  voicePill.querySelector('.vp-label').textContent = piperProgressLabel(p);
+  voicePill.querySelector('.vp-track i').style.width = `${pct}%`;
+}
+
+function warmDefaultVoice() {
+  const tts = getPrefs().tts;
+  if (!tts.enabled || tts.provider !== 'piper' || navigator.onLine === false) return;
+  onPiperProgress(renderVoicePill);
+  setTimeout(() => {
+    preloadPiperVoice(tts.piperVoice).catch(err => {
+      console.warn('Default voice download deferred', err);
+      voicePill?.remove();
+      voicePill = null;
+    });
+  }, 1600);
+}
+
 /* ── Boot ────────────────────────────────────────────────────────── */
 async function boot() {
   applyPrefs();
@@ -275,6 +310,7 @@ async function boot() {
     app.go('library');
     navigator.storage?.persist?.().catch?.(() => {});
     setTimeout(() => maybeOfferDownloadedBook(), 1200);
+    warmDefaultVoice();
   } catch (err) {
     console.error(err);
     $('#view').innerHTML = `<div class="empty-list" style="margin-top:40px">

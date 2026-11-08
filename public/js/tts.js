@@ -220,6 +220,16 @@ export const PIPER_PRESETS = [
   },
 ];
 
+export function piperVoiceForLanguage(language = '') {
+  const base = String(language).toLowerCase().replace('_', '-').split('-')[0];
+  if (!base) return null;
+  const voices = getPiperVoices();
+  const match = voices.filter(v => String(v.lang || '').toLowerCase().replace('-', '_').split('_')[0] === base);
+  if (!match.length) return null;
+  const rank = v => (v.quality === 'high' ? 0 : v.quality === 'medium' ? 1 : 2);
+  return match.slice().sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))[0];
+}
+
 export function piperSpeakerName(voice, speaker = 0) {
   if (!voice || voice.num_speakers <= 1) return '';
   const entry = Object.entries(voice.speaker_id_map || {}).find(([, id]) => Number(id) === Number(speaker));
@@ -326,6 +336,29 @@ async function fetchModelWithProgress(url, expectedBytes, onProgress) {
   return new Blob(chunks, { type: 'application/octet-stream' });
 }
 
+async function downloadVoiceData(voice) {
+  const total = voice.size_bytes || 0;
+  emitPiperProgress({
+    phase: 'downloading', voiceId: voice.id, voiceName: voice.name,
+    loaded: 0, total, percent: 0, cached: false,
+  });
+  const configRes = await fetch(voice.configUrl, { cache: 'force-cache' });
+  if (!configRes.ok) {
+    throw new Error('The Piper voice model could not be downloaded. Check your connection and try again.');
+  }
+  const configData = await configRes.json();
+  const blob = await fetchModelWithProgress(voice.modelUrl, total, (loaded, size) => {
+    emitPiperProgress({
+      loaded,
+      total: size || total,
+      percent: size ? Math.min(99, Math.round((loaded / size) * 100)) : 0,
+    });
+  });
+  emitPiperProgress({ phase: 'preparing', percent: 100 });
+  await putCachedVoice(voice.modelUrl, configData, blob);
+  return { configData, blob };
+}
+
 class PiperVoiceProvider {
   constructor() {
     this.memory = new Map();
@@ -355,23 +388,7 @@ class PiperVoiceProvider {
       return data;
     }
 
-    emitPiperProgress({
-      phase: 'downloading', voiceId: id, voiceName: voice.name, loaded: 0, total, percent: 0, cached: false,
-    });
-    const configRes = await fetch(voice.configUrl, { cache: 'force-cache' });
-    if (!configRes.ok) {
-      throw new Error('The Piper voice model could not be downloaded. Check your connection and try again.');
-    }
-    const configData = await configRes.json();
-    const blob = await fetchModelWithProgress(voice.modelUrl, total, (loaded, size) => {
-      emitPiperProgress({
-        loaded,
-        total: size || total,
-        percent: size ? Math.min(99, Math.round((loaded / size) * 100)) : 0,
-      });
-    });
-    emitPiperProgress({ phase: 'preparing', percent: 100 });
-    await putCachedVoice(cacheKey, configData, blob);
+    const { configData, blob } = await downloadVoiceData(voice);
     const url = URL.createObjectURL(blob);
     this.urls.push(url);
     const data = [configData, url];
@@ -420,6 +437,32 @@ async function getPiper() {
 
 let piperBusy = 0;
 
+function settlePiperProgress() {
+  emitPiperProgress({ phase: 'ready' });
+  setTimeout(() => {
+    if (!piperBusy && piperProgress.phase === 'ready') {
+      emitPiperProgress({ phase: 'idle', loaded: 0, total: 0, percent: 0 });
+    }
+  }, 1400);
+}
+
+/* Download and cache a voice without starting the speech engine. */
+export async function preloadPiperVoice(voiceId) {
+  await loadPiperCatalog();
+  const voice = piperVoiceById(voiceId);
+  if (!voice || voice.id !== voiceId) return 'missing';
+  const cached = await getCachedVoice(voice.modelUrl);
+  if (cached?.blob && cached?.config) {
+    emitPiperProgress({ phase: 'ready', voiceId: voice.id, voiceName: voice.name, cached: true, percent: 100 });
+    settlePiperProgress();
+    return 'cached';
+  }
+  await downloadVoiceData(voice);
+  emitPiperProgress({ phase: 'ready', voiceId: voice.id, voiceName: voice.name, percent: 100 });
+  settlePiperProgress();
+  return 'downloaded';
+}
+
 export async function piperGenerate(text, voiceId, speaker = null) {
   await loadPiperCatalog();
   const voice = piperVoiceById(voiceId);
@@ -432,14 +475,7 @@ export async function piperGenerate(text, voiceId, speaker = null) {
     return result.file; // WAV Blob
   } finally {
     piperBusy = Math.max(0, piperBusy - 1);
-    if (!piperBusy) {
-      emitPiperProgress({ phase: 'ready' });
-      setTimeout(() => {
-        if (!piperBusy && piperProgress.phase === 'ready') {
-          emitPiperProgress({ phase: 'idle', loaded: 0, total: 0, percent: 0 });
-        }
-      }, 1200);
-    }
+    if (!piperBusy) settlePiperProgress();
   }
 }
 
@@ -480,6 +516,7 @@ export class SpeechEngine {
     this._chunkIndex = 0;
     this._token = 0;
     this._audio = null;
+    this.voice = null;
     this._audioEl = null;
     this._primed = false;
     this._audioUrl = null;
@@ -605,7 +642,16 @@ export class SpeechEngine {
     }
   }
 
+  setVoiceOverride(voice) {
+    const next = voice?.voiceId ? voice : null;
+    const same = JSON.stringify(next) === JSON.stringify(this.voice);
+    this.voice = next;
+    if (!same) this._cache.clear();
+  }
+
   applyVoiceChange() {
+    this.voice = null;
+    this._cache.clear();
     if (this.state === 'playing' || this.state === 'loading') this.restart();
   }
 
@@ -795,7 +841,9 @@ export class SpeechEngine {
     if (this._inFlight.has(key)) return this._inFlight.get(key);
 
     const tts = getPrefs().tts;
-    const promise = piperGenerate(text, tts.piperVoice, tts.piperSpeaker)
+    const voiceId = this.voice?.voiceId || tts.piperVoice;
+    const speaker = this.voice?.voiceId ? (this.voice.speaker ?? 0) : tts.piperSpeaker;
+    const promise = piperGenerate(text, voiceId, speaker)
       .then(blob => {
         const url = URL.createObjectURL(blob);
         const entry = { url, at: Date.now() };

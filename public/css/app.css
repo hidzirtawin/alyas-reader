@@ -17,6 +17,27 @@
 @font-face { font-family: 'Fraunces'; src: url('../fonts/fraunces-400i.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
 @font-face { font-family: 'Fraunces'; src: url('../fonts/fraunces-600.woff2') format('woff2'); font-weight: 600; font-style: normal; font-display: swap; }
 
+@font-face { font-family: 'Merriweather'; src: url('../fonts/merriweather-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Merriweather'; src: url('../fonts/merriweather-400i.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Merriweather'; src: url('../fonts/merriweather-700.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Lora'; src: url('../fonts/lora-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Lora'; src: url('../fonts/lora-400i.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Lora'; src: url('../fonts/lora-600.woff2') format('woff2'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'EB Garamond'; src: url('../fonts/eb-garamond-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'EB Garamond'; src: url('../fonts/eb-garamond-400i.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'EB Garamond'; src: url('../fonts/eb-garamond-600.woff2') format('woff2'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Libre Baskerville'; src: url('../fonts/libre-baskerville-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Libre Baskerville'; src: url('../fonts/libre-baskerville-400i.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Libre Baskerville'; src: url('../fonts/libre-baskerville-700.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Source Serif 4'; src: url('../fonts/source-serif-4-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Source Serif 4'; src: url('../fonts/source-serif-4-400i.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Source Serif 4'; src: url('../fonts/source-serif-4-600.woff2') format('woff2'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Lexend'; src: url('../fonts/lexend-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Lexend'; src: url('../fonts/lexend-600.woff2') format('woff2'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'OpenDyslexic'; src: url('../fonts/opendyslexic-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'OpenDyslexic'; src: url('../fonts/opendyslexic-400i.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'OpenDyslexic'; src: url('../fonts/opendyslexic-700.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+
 :root {
   --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
@@ -703,6 +724,22 @@ textarea.input { height: auto; min-height: 84px; padding: 11px 13px; resize: ver
 .sw-night { background: #15181b; color: #e6e0d4; }
 .sw-black { background: #000; color: #ded7ca; }
 
+.dyslexia-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 13px; border-radius: 11px;
+  background: var(--accent-softer); border: 1px solid var(--accent-soft);
+}
+.dyslexia-card .dc-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dyslexia-card strong { font-size: 12px; }
+.dyslexia-card span { font-size: 10.5px; color: var(--ink-2); line-height: 1.4; }
+.font-picker { display: flex; align-items: center; gap: 10px; }
+.font-picker .font-aa {
+  flex: none; width: 44px; height: 44px; border-radius: 10px;
+  display: grid; place-items: center;
+  background: var(--surface-2); border: 1px solid var(--line);
+  font-size: 20px; color: var(--ink);
+}
+.font-picker .select { flex: 1; height: 44px; }
 .font-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .font-btn {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -716,7 +753,7 @@ textarea.input { height: auto; min-height: 84px; padding: 11px 13px; resize: ver
 .font-btn.is-active { border-color: var(--accent); background: var(--accent-softer); }
 
 .sample-card { padding: 20px 22px; border-radius: 14px; background: var(--reader-bg); color: var(--reader-ink); border: 1px solid var(--line); }
-.sample-card p { margin: 0; font-family: var(--reader-font); font-size: calc(var(--reader-size) * .9); line-height: var(--reader-lh); text-align: var(--reader-justify); hyphens: var(--reader-hyphens); }
+.sample-card p { margin: 0; font-family: var(--reader-font); font-size: calc(var(--reader-size) * .9); line-height: var(--reader-lh); letter-spacing: var(--reader-letter-spacing, .002em); word-spacing: var(--reader-word-spacing, normal); text-align: var(--reader-justify); hyphens: var(--reader-hyphens); }
 .sample-card p + p { margin-top: .8em; text-indent: 1.2em; }
 .sample-card .sample-cap { display: flex; justify-content: space-between; margin-bottom: 12px; font-family: var(--font-ui); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--reader-ink-2); opacity: .7; }
 
@@ -797,7 +834,8 @@ textarea.input { height: auto; min-height: 84px; padding: 11px 13px; resize: ver
   font-family: var(--reader-font);
   font-size: var(--reader-size);
   line-height: var(--reader-lh);
-  letter-spacing: .002em;
+  letter-spacing: var(--reader-letter-spacing, .002em);
+  word-spacing: var(--reader-word-spacing, normal);
   text-align: var(--reader-justify);
   hyphens: var(--reader-hyphens);
   -webkit-hyphens: var(--reader-hyphens);
@@ -1021,7 +1059,7 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
 
 /* selection toolbar */
 .selection-bar {
-  position: fixed; z-index: 100;
+  position: fixed; z-index: 100; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none;
   display: flex; align-items: center; gap: 2px;
   padding: 6px; border-radius: 999px;
   background: #1d1913; color: #f4ecdd;
@@ -1030,6 +1068,7 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
   animation: pop .16s var(--ease) both;
   transform-origin: bottom center;
 }
+.selection-bar::-webkit-scrollbar { display: none; }
 .selection-bar::after {
   content: ''; position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px;
   background: #1d1913; transform: translateX(-50%) rotate(45deg); border-radius: 1px;
@@ -1156,6 +1195,21 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
 .source-name svg { width: 12px; height: 12px; margin-left: auto; color: var(--accent); flex: none; }
 .source-desc { font-size: 11px; line-height: 1.45; color: var(--ink-2); }
 .source-host { font-size: 10px; color: var(--ink-3); }
+
+.voice-pill {
+  position: fixed; z-index: 214; left: 50%; top: 78px;
+  transform: translateX(-50%);
+  width: min(92vw, 360px);
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 9px 13px; border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 18px 40px -22px rgba(20, 14, 6, .5);
+  font-size: 11px; color: var(--ink-2);
+  animation: toast-in .25s var(--ease) both;
+}
+.voice-pill .vp-track { height: 3px; border-radius: 999px; overflow: hidden; background: var(--surface-3); }
+.voice-pill .vp-track i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: inherit; transition: width .2s; }
 
 .download-prompt {
   position: fixed; z-index: 215; left: 50%; bottom: 26px;
@@ -1524,6 +1578,22 @@ kbd { font-family: var(--font-ui); font-size: 10px; font-weight: 600; min-width:
   background: var(--surface-2); border: 1px solid var(--line);
   font-size: 11px; line-height: 1.5; color: var(--ink-2);
 }
+.dict-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 26px 6px; text-align: center; font-size: 12px; color: var(--ink-2); }
+.dict-track { width: min(280px, 82%); height: 4px; border-radius: 999px; overflow: hidden; background: var(--surface-3); }
+.dict-track i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--accent); transition: width .2s; }
+.dict-hint { font-size: 10.5px; line-height: 1.55; color: var(--ink-3); max-width: 320px; }
+.dict-entry p { margin: 0 0 .85em; font-size: 13px; line-height: 1.7; color: var(--ink-2); }
+.dict-entry p:first-child { color: var(--ink); }
+.dict-entry p:last-child { margin-bottom: 0; }
+.dict-source { margin-top: 16px; padding-top: 11px; border-top: 1px solid var(--line); font-size: 10px; color: var(--ink-3); }
+.dict-none { font-size: 13px; color: var(--ink-2); margin-bottom: 10px; }
+.dict-suggest-label { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); margin: 4px 0 7px; }
+.dict-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+.dict-suggest button {
+  padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface-2); font-size: 11px; color: var(--ink-2);
+}
+.dict-suggest button:hover { border-color: var(--accent); color: var(--ink); }
 .speaker-count { font-size: 10px; color: var(--ink-3); margin: 2px 0 5px; }
 .voice-progress { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
 .voice-progress[hidden] { display: none; }

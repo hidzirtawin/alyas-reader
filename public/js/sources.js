@@ -256,7 +256,7 @@ export function openBookSources() {
     wide: true,
     foot: `<div style="display:flex;align-items:center;gap:10px;width:100%;flex-wrap:wrap">
       <button class="btn btn-sm btn-primary" id="sourcesAdd">${icon('upload')} Add a downloaded book</button>
-      <span class="hint" style="margin-left:auto">EPUB · PDF · DOCX · TXT · CBZ · CBR</span>
+      <span class="hint" style="margin-left:auto">EPUB · PDF · DOCX · ODT · RTF · HTML · FB2 · TXT · CBZ · CBR</span>
     </div>`,
     onMount: ({ bodyEl, footEl, close }) => {
       bodyEl.querySelectorAll('.source-card').forEach(card => {

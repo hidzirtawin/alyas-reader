@@ -3,18 +3,20 @@
 import { db } from './db.js';
 import {
   getPrefs, setReaderPrefs, savePrefs, cycleSpeed, DEFAULT_READER,
-  FONTS, THEMES,
+  FONTS, THEMES, DYSLEXIA_READER,
 } from './prefs.js';
 import { buildReflowable, buildComicBook, isComicFormat } from './renderers.js';
 import { PdfView } from './pdfview.js';
 import { ComicView } from './comicview.js';
-import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel } from './tts.js';
+import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage } from './tts.js';
 import {
   toast, modal, confirmDialog, contextMenu, closeAllModals, shortcutsModal,
   formatLabel, isModalOpen,
 } from './ui.js';
 import { openBookDetails } from './details.js';
 import { openVoiceModal } from './settings.js';
+import { openDictionary } from './dictionary.js';
+import { baseLanguage, languageName, languageMatches } from './language.js';
 import {
   $, esc, icon, clamp, debounce, uid, normalizedText,
   detectSentenceSegments, formatTimeLeft, copyText, isEditable, downloadBlob, rafThrottle,
@@ -282,6 +284,16 @@ function wireEvents(state) {
   document.addEventListener('selectionchange', onSelChange);
   state.cleanup.push(() => document.removeEventListener('selectionchange', onSelChange));
 
+  const onDblClick = e => {
+    if (state.mode !== 'reflow' || !state.article) return;
+    if (!state.article.contains(e.target)) return;
+    const text = (window.getSelection()?.toString() || '').trim();
+    if (!text || /\s/.test(text)) return;
+    openDictionary(text, state.book?.language || 'en');
+  };
+  refs.stage.addEventListener('dblclick', onDblClick);
+  state.cleanup.push(() => refs.stage.removeEventListener('dblclick', onDblClick));
+
   const onDocDown = e => {
     if (!refs.typePanel.hidden && !refs.typePanel.contains(e.target) && !refs.typeBtn.contains(e.target)) closeTypePanel(state);
   };
@@ -439,6 +451,7 @@ function renderChapter(state, index, opts = {}) {
 
   refs.stage.innerHTML = chapterMarkup(state, chapter, index);
   state.article = refs.stage.querySelector('.reading');
+  if (state.article) state.article.lang = baseLanguage(state.book?.language || 'en') || 'en';
   refs.readerChapterTitle.textContent = chapter.label || `Chapter ${index + 1}`;
   hideSelection(state);
 
@@ -747,13 +760,21 @@ function gotoChapter(state, index, opts = {}) {
   if (state.mode !== 'reflow') return;
   const n = state.book.chapters.length;
   const next = clamp(index, 0, n - 1);
-  if (next === state.chapterIndex && !opts.anchor && !opts.highlightId) return;
-  if (next === state.chapterIndex && opts.anchor) {
-    scrollToAnchor(state, opts.anchor);
+  if (next === state.chapterIndex) {
+    if (opts.anchor) { scrollToAnchor(state, opts.anchor); return; }
+    if (opts.highlightId) { scrollToMark(state, opts.highlightId); return; }
+    if (opts.ratio != null) { scrollToRatio(state, opts.ratio); return; }
     return;
   }
   closeTTS(state);
   renderChapter(state, next, { ratio: opts.ratio || 0, anchor: opts.anchor, highlightId: opts.highlightId, keepDock: false });
+}
+
+function scrollToRatio(state, ratio) {
+  const max = Math.max(0, refs.stage.scrollHeight - refs.stage.clientHeight);
+  state.programmatic = true;
+  refs.stage.scrollTo({ top: max * clamp(ratio, 0, 1), behavior: 'auto' });
+  setTimeout(() => { state.programmatic = false; }, 100);
 }
 
 function scrollToAnchor(state, anchor) {
@@ -902,6 +923,13 @@ async function handleSelectionAction(state, e) {
   }
   const action = e.target.closest('[data-sel]')?.dataset.sel;
   if (!action) return;
+  if (action === 'define') {
+    const text = state.pendingSel?.text || window.getSelection()?.toString() || '';
+    hideSelection(state);
+    window.getSelection()?.removeAllRanges();
+    openDictionary(text, state.book?.language || 'en');
+    return;
+  }
   if (action === 'copy') {
     const ok = await copyText(state.pendingSel?.text || '');
     toast(ok ? 'Copied' : 'Could not copy', ok ? 'ok' : 'err');
@@ -1090,6 +1118,7 @@ function closeTTS(state, { hideDock = true } = {}) {
 
 async function toggleListen(state) {
   state.engine?._primeAudio?.();
+  applyBookVoice(state);
   if (state.mode === 'comic') {
     toast('Comic pages are images, so there’s no text to narrate.', 'info');
     return;
@@ -1110,7 +1139,34 @@ async function toggleListen(state) {
   else state.engine.play();
 }
 
+function applyBookVoice(state) {
+  const engine = state.engine;
+  if (!engine) return;
+  const tts = getPrefs().tts;
+  const bookLang = baseLanguage(state.book?.language || state.record?.language || '');
+  if (!tts.enabled || tts.provider !== 'piper' || tts.autoLanguageVoice === false || !bookLang || bookLang === 'en') {
+    engine.setVoiceOverride(null);
+    return;
+  }
+  const current = piperVoiceById(tts.piperVoice);
+  if (languageMatches(current?.lang, bookLang)) {
+    engine.setVoiceOverride(null);
+    return;
+  }
+  const match = piperVoiceForLanguage(bookLang);
+  if (!match) {
+    engine.setVoiceOverride(null);
+    return;
+  }
+  engine.setVoiceOverride({ voiceId: match.id, speaker: 0, name: match.name });
+  if (!state.languageVoiceNotice) {
+    toast(`Using ${match.name} for this ${languageName(bookLang)} book`, 'info');
+    state.languageVoiceNotice = true;
+  }
+}
+
 async function startTTS(state, { autoplay = true, start = null } = {}) {
+  applyBookVoice(state);
   if (state.mode === 'comic') {
     toast('Comic pages are images, so there’s no text to narrate.', 'info');
     return;
@@ -1324,7 +1380,8 @@ function handleDockAction(state, action) {
 
 function updateVoiceLabel(state) {
   if (!refs) return;
-  refs.ttsVoiceLabel.textContent = describeVoice();
+  const override = state?.engine?.voice;
+  refs.ttsVoiceLabel.textContent = override?.name ? `Piper · ${override.name}` : describeVoice();
 }
 
 function updateSpeedLabel() {
@@ -1701,11 +1758,9 @@ function buildTypePanel(state) {
     </div>
     <div class="tp-section">
       <div class="tp-label">Typeface</div>
-      <div class="tp-fonts">
-        ${FONTS.map(f => `<button class="tp-font${r.font === f.id ? ' is-active' : ''}" data-tp-font="${f.id}">
-          <span class="faa" style="font-family:${f.stack}">Aa</span><span class="fname">${f.name}</span>${icon('check', 'tick')}
-        </button>`).join('')}
-      </div>
+      <select class="select" data-tp-font-select aria-label="Typeface" style="width:100%">
+        ${FONTS.map(f => `<option value="${f.id}"${r.font === f.id ? ' selected' : ''}>${esc(f.name)} — ${esc(f.note)}</option>`).join('')}
+      </select>
     </div>
     <div class="tp-section">
       <div class="tp-label">Text size <output id="tpSizeOut">${r.size}px</output></div>
@@ -1728,6 +1783,15 @@ function buildTypePanel(state) {
       <input class="range" data-rs="para" type="range" min="0.4" max="1.6" step="0.05" value="${r.para}" aria-label="Paragraph spacing">
     </div>
     <div class="tp-section">
+      <div class="tp-label">Letter spacing <output id="tpLetterOut">${(r.letterSpacing || 0).toFixed(3)}em</output></div>
+      <input class="range" data-rs="letterSpacing" type="range" min="0" max="0.12" step="0.005" value="${r.letterSpacing || 0}" aria-label="Letter spacing">
+    </div>
+    <div class="tp-section">
+      <div class="tp-label">Word spacing <output id="tpWordOut">${(r.wordSpacing || 0).toFixed(2)}em</output></div>
+      <input class="range" data-rs="wordSpacing" type="range" min="0" max="0.5" step="0.01" value="${r.wordSpacing || 0}" aria-label="Word spacing">
+      <button class="btn btn-sm btn-block" style="margin-top:10px" data-tp-dyslexia>${icon('type')} Dyslexia-friendly setup</button>
+    </div>
+    <div class="tp-section">
       <label class="tp-inline"><span>Justify text</span><span class="switch"><input type="checkbox" data-rt="justify" ${r.justify ? 'checked' : ''}><span class="track"></span></span></label>
       <label class="tp-inline" style="margin-top:9px"><span>Hyphenation</span><span class="switch"><input type="checkbox" data-rt="hyphens" ${r.hyphens ? 'checked' : ''}><span class="track"></span></span></label>
     </div>
@@ -1745,17 +1809,17 @@ function handleTypeClick(state, e) {
     buildTypePanel(state);
     return;
   }
-  const font = e.target.closest('[data-tp-font]');
-  if (font) {
-    setReaderPrefs({ font: font.dataset.tpFont });
-    buildTypePanel(state);
-    return;
-  }
   const step = e.target.closest('[data-tp-size-step]');
   if (step) {
     const size = clamp(getPrefs().reader.size + Number(step.dataset.tpSizeStep), 14, 28);
     setReaderPrefs({ size });
     buildTypePanel(state);
+    return;
+  }
+  if (e.target.closest('[data-tp-dyslexia]')) {
+    setReaderPrefs(DYSLEXIA_READER);
+    buildTypePanel(state);
+    toast('Dyslexia-friendly reading on', 'ok');
     return;
   }
   if (e.target.closest('[data-tp-reset]')) {
@@ -1777,6 +1841,7 @@ function handleTypeClick(state, e) {
         updateVoiceLabel(state);
         updateSpeedLabel();
         state.engine.applyVoiceChange();
+        applyBookVoice(state);
       },
     });
   }
@@ -1792,6 +1857,8 @@ function handleTypeInput(state, e) {
     lineHeight: ['tpLhOut', value.toFixed(2)],
     measure: ['tpMeasureOut', `${value}px`],
     para: ['tpParaOut', `${value.toFixed(2)}em`],
+    letterSpacing: ['tpLetterOut', `${value.toFixed(3)}em`],
+    wordSpacing: ['tpWordOut', `${value.toFixed(2)}em`],
   }[key];
   if (out) {
     const el = $(`#${out[0]}`);
@@ -1800,6 +1867,11 @@ function handleTypeInput(state, e) {
 }
 
 function handleTypeChange(state, e) {
+  if (e.target.matches('[data-tp-font-select]')) {
+    setReaderPrefs({ font: e.target.value });
+    buildTypePanel(state);
+    return;
+  }
   const key = e.target.dataset.rt;
   if (key) setReaderPrefs({ [key]: e.target.checked });
 }
@@ -1808,9 +1880,62 @@ function handleTypeChange(state, e) {
    Menus / actions
    ═══════════════════════════════════════════════════════════════════ */
 
+function openGoTo(state) {
+  if (state.mode === 'pdf' || state.mode === 'comic') {
+    const max = state.numPages || 1;
+    const body = document.createElement('div');
+    body.innerHTML = `<div class="field">
+      <label for="goPage">Page number <span class="dim" style="font-weight:400">· 1–${max}</span></label>
+      <input class="input" id="goPage" type="number" min="1" max="${max}" value="${state.page || 1}" autofocus>
+    </div>
+    <p class="hint">Jump straight to a page, even if it belongs to another chapter.</p>`;
+    const foot = document.createElement('div');
+    foot.innerHTML = `<button class="btn btn-primary" data-go-page>Go to page</button>`;
+    const m = modal({ eyebrow: 'Jump', title: 'Go to page', body, foot });
+    const go = () => {
+      const n = clamp(parseInt(body.querySelector('#goPage')?.value, 10) || 1, 1, max);
+      m.close();
+      if (state.mode === 'pdf') state.pdfView?.scrollToPage(n, { smooth: false });
+      else state.comicView?.showPage(n);
+    };
+    foot.querySelector('[data-go-page]').onclick = go;
+    body.querySelector('#goPage').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); go(); }
+    });
+    return;
+  }
+
+  const chapters = state.book?.chapters || [];
+  if (!chapters.length) return;
+  const currentPct = Math.round((state.ratio || 0) * 100);
+  const body = document.createElement('div');
+  body.innerHTML = `<div class="field">
+    <label for="goChapter">Chapter</label>
+    <select class="select" id="goChapter">
+      ${chapters.map((c, i) => `<option value="${i}"${i === state.chapterIndex ? ' selected' : ''}>${esc(c.label || `Chapter ${i + 1}`)}</option>`).join('')}
+    </select>
+  </div>
+  <div class="field" style="margin-top:14px">
+    <label for="goPos">Position in chapter <span class="dim" id="goPosOut" style="font-weight:400">${currentPct}%</span></label>
+    <input class="range" id="goPos" type="range" min="0" max="100" step="1" value="${currentPct}">
+  </div>
+  <p class="hint">Reflowable pages change with type size, so jump by chapter and position.</p>`;
+  const foot = document.createElement('div');
+  foot.innerHTML = '<button class="btn btn-primary" data-go-chapter>Jump</button>';
+  const m = modal({ eyebrow: 'Jump', title: 'Go to another chapter', body, foot });
+  const pos = body.querySelector('#goPos');
+  pos.addEventListener('input', () => { body.querySelector('#goPosOut').textContent = `${pos.value}%`; });
+  const go = () => {
+    m.close();
+    gotoChapter(state, Number(body.querySelector('#goChapter').value), { ratio: Number(pos.value) / 100 });
+  };
+  foot.querySelector('[data-go-chapter]').onclick = go;
+}
+
 function openMoreMenu(state) {
   const rect = refs.moreBtn.getBoundingClientRect();
   contextMenu(rect.right - 8, rect.bottom + 8, [
+    { label: 'Go to page…', icon: 'list', onSelect: () => openGoTo(state) },
     { label: 'Book details', icon: 'info', onSelect: () => openBookDetails(state.app, state.record, { fromReader: true }) },
     {
       label: 'Download original', icon: 'download', onSelect: async () => {
@@ -1906,6 +2031,7 @@ function handleKey(state, e) {
   if (k === 'b') { e.preventDefault(); toggleBookmark(state); return; }
   if (k === 'c') { e.preventDefault(); toggleToc(state); return; }
   if (k === 'a') { e.preventDefault(); toggleTypePanel(state); return; }
+  if (k === 'g') { e.preventDefault(); openGoTo(state); return; }
   if (e.key === '?') { e.preventDefault(); shortcutsModal(); return; }
 
   if (e.key === 'ArrowRight') {

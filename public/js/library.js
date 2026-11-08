@@ -151,7 +151,7 @@ function addTileMarkup() {
         <span class="add-tile-inner">
           <span class="plus-ring">${icon('plus')}</span>
           <strong>Add a book</strong>
-          <small>EPUB · PDF · DOCX<br>CBZ · CBR · TXT</small>
+          <small>EPUB · PDF · DOCX<br>HTML · RTF · ODT · FB2</small>
         </span>
       </button>
       <div class="book-info">
@@ -166,7 +166,7 @@ function emptyStateMarkup() {
     <section class="empty-hero">
       <div class="empty-copy">
         <div class="eyebrow">A quiet place to read</div>
-        <p>Drop in an EPUB, PDF, Word document, comic archive or plain text file. Settle into a typeface you love — or let a natural voice read it aloud while you listen.</p>
+        <p>Drop in an EPUB, PDF, Word document, ODT, RTF, HTML, FB2, comic archive or plain text file. Settle into a typeface you love — or let a natural voice read it aloud while you listen.</p>
         <div class="empty-actions">
           <button class="btn btn-primary" data-add>${icon('plus')} Add your first book</button>
           <button class="btn" data-free-books>${icon('book')} Free books</button>
@@ -192,7 +192,7 @@ function emptyStateMarkup() {
     <div class="feature-strip">
       <div class="feature"><div class="fi">${icon('headphones')}</div><div><strong>Natural narration</strong><p>Free Piper neural voices read with you — offline, with American, British, Scottish and Australian accents.</p></div></div>
       <div class="feature"><div class="fi">${icon('shield')}</div><div><strong>Everything stays local</strong><p>Your files, progress, bookmarks and notes live in this browser. Nothing is uploaded.</p></div></div>
-      <div class="feature"><div class="fi">${icon('type')}</div><div><strong>Made for long reads</strong><p>Six typefaces, four themes, and comfortable control over size, spacing and measure.</p></div></div>
+      <div class="feature"><div class="fi">${icon('type')}</div><div><strong>Made for long reads</strong><p>Thirteen typefaces, a dyslexia-friendly mode, four themes, and comfortable control over size and spacing.</p></div></div>
     </div>`;
 }
 

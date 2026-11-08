@@ -5,6 +5,7 @@ import {
   esc, countWords, normalizedText, imageToCover,
   fileExtension, titleFromFilename, withTimeout,
 } from './util.js';
+import { detectLanguage, baseLanguage } from './language.js';
 
 if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs/pdf.worker.min.js';
@@ -19,14 +20,23 @@ export function detectFormat(file) {
   if (ext === 'epub') return 'epub';
   if (ext === 'pdf') return 'pdf';
   if (ext === 'docx') return 'docx';
-  if (ext === 'txt') return 'txt';
+  if (ext === 'txt' || ext === 'text' || ext === 'log' || ext === 'rst') return 'txt';
   if (ext === 'md' || ext === 'markdown') return 'md';
+  if (ext === 'html' || ext === 'htm' || ext === 'xhtml') return 'html';
+  if (ext === 'rtf') return 'rtf';
+  if (ext === 'odt') return 'odt';
+  if (ext === 'fb2') return 'fb2';
   if (ext === 'cbz' || ext === 'zip') return 'cbz';
   if (ext === 'cbr') return 'cbr';
   const t = (file.type || '').toLowerCase();
   if (t.includes('epub')) return 'epub';
   if (t.includes('pdf')) return 'pdf';
   if (t.includes('wordprocessingml')) return 'docx';
+  if (t.includes('html')) return 'html';
+  if (t.includes('rtf')) return 'rtf';
+  if (t.includes('opendocument.text')) return 'odt';
+  if (t.includes('fictionbook') || t.includes('fb2')) return 'fb2';
+  if (t.includes('markdown')) return 'md';
   if (t.startsWith('text/plain')) return 'txt';
   if (t.includes('comicbook') || t.includes('cbz')) return 'cbz';
   if (t.includes('x-cbr')) return 'cbr';
@@ -37,10 +47,10 @@ export const isComicFormat = format => format === 'cbz' || format === 'cbr';
 
 export function unsupportedMessage(file) {
   const ext = fileExtension(file.name);
-  if (['doc', 'rtf', 'odt', 'mobi', 'azw', 'azw3', 'fb2', 'djvu'].includes(ext)) {
-    return `.${ext} isn’t supported yet — try EPUB, PDF, DOCX, TXT, MD, CBZ or CBR.`;
+  if (['doc', 'mobi', 'azw', 'azw3', 'djvu', 'cb7'].includes(ext)) {
+    return `.${ext} isn’t supported yet — try EPUB, PDF, DOCX, ODT, RTF, HTML, FB2, TXT, Markdown, CBZ or CBR.`;
   }
-  return 'That file type isn’t supported — try EPUB, PDF, DOCX, TXT, MD, CBZ or CBR.';
+  return 'That file type isn’t supported — try EPUB, PDF, DOCX, ODT, RTF, HTML, FB2, TXT, Markdown, CBZ or CBR.';
 }
 
 export async function probeFile(file) {
@@ -50,6 +60,10 @@ export async function probeFile(file) {
   if (format === 'epub') probed = await probeEpub(file);
   else if (format === 'pdf') probed = await probePdf(file);
   else if (format === 'docx') probed = await probeDocx(file);
+  else if (format === 'html') probed = await probeHtml(file);
+  else if (format === 'rtf') probed = await probeRtf(file);
+  else if (format === 'odt') probed = await probeOdt(file);
+  else if (format === 'fb2') probed = await probeFb2(file);
   else if (isComicFormat(format)) probed = await probeComic(file, format);
   else probed = await probeText(file, format);
   return {
@@ -66,6 +80,10 @@ export async function probeFile(file) {
 export async function buildReflowable(record, blob) {
   if (record.format === 'epub') return buildEpub(record, blob);
   if (record.format === 'docx') return buildDocx(record, blob);
+  if (record.format === 'html') return buildHtml(record, blob);
+  if (record.format === 'rtf') return buildRtf(record, blob);
+  if (record.format === 'odt') return buildOdt(record, blob);
+  if (record.format === 'fb2') return buildFb2(record, blob);
   return buildText(record, blob);
 }
 
@@ -543,6 +561,8 @@ async function readDocxCore(file) {
       out.author = get('creator');
       out.description = plainDescription(get('description') || get('subject'));
     }
+    const docFile = zip.file('word/document.xml');
+    if (docFile) out.sample = normalizedText((await docFile.async('string')).replace(/<[^>]+>/g, ' ')).slice(0, 20000);
     const media = Object.keys(zip.files)
       .filter(p => /^word\/media\/[^/]+\.(jpe?g|png|gif|webp|bmp)$/i.test(p))
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -559,7 +579,7 @@ async function probeDocx(file) {
   const core = await readDocxCore(file);
   return {
     title: core.title, author: core.author, cover: core.cover,
-    description: core.description, language: 'en', meta: {},
+    description: core.description, language: detectLanguage(core.sample || ''), meta: {},
   };
 }
 
@@ -606,29 +626,83 @@ async function buildDocx(record, blob) {
    ═══════════════════════════════════════════════════════════════════ */
 
 async function probeText(file, format) {
-  const raw = await file.slice(0, 8192).text().catch(() => '');
+  const raw = await file.slice(0, 30000).text().catch(() => '');
   let title = '';
   if (format === 'md') {
     const m = raw.match(/^\s*#\s+(.+)$/m);
     if (m) title = normalizedText(m[1]);
   }
-  return { title, author: '', cover: null, description: '', language: 'en', meta: {} };
+  return { title, author: '', cover: null, description: '', language: detectLanguage(raw), meta: {} };
 }
 
-async function buildText(record, blob) {
-  const buffer = await blob.arrayBuffer();
-  let text;
+async function probeHtml(file) {
+  const raw = await file.slice(0, 120000).text().catch(() => '');
+  let title = '';
+  let language = '';
   try {
-    text = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
-  } catch {
-    // Fall back for older, non-UTF-8 plain-text books.
-    text = new TextDecoder('windows-1252').decode(buffer);
-  }
-  text = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
-  let html;
-  if (record.format === 'md') html = markdownToHtml(text);
-  else html = plainTextToHtml(text);
+    const doc = new DOMParser().parseFromString(raw, 'text/html');
+    title = normalizedText(doc.querySelector('title')?.textContent || doc.querySelector('h1')?.textContent || '');
+    language = baseLanguage(doc.documentElement.getAttribute('lang') || '');
+  } catch {}
+  return { title, author: '', cover: null, description: '', language: detectLanguage(raw, language), meta: {} };
+}
 
+async function probeRtf(file) {
+  const raw = await file.slice(0, 30000).text().catch(() => '');
+  const titleMatch = raw.match(/\\title\s+([^;{}]+)/);
+  return {
+    title: titleMatch ? normalizedText(titleMatch[1]) : '',
+    author: '', cover: null, description: '',
+    language: detectLanguage(rtfToText(raw)), meta: {},
+  };
+}
+
+async function probeOdt(file) {
+  let title = '';
+  let author = '';
+  let language = '';
+  let sample = '';
+  try {
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const metaFile = zip.file('meta.xml');
+    if (metaFile) {
+      const meta = new DOMParser().parseFromString(await metaFile.async('string'), 'application/xml');
+      const find = name => normalizedText(Array.from(meta.getElementsByTagName('*')).find(n => (n.localName || '').toLowerCase() === name)?.textContent || '');
+      title = find('title');
+      author = find('creator');
+      language = find('language');
+    }
+    const contentFile = zip.file('content.xml');
+    if (contentFile) {
+      const content = await contentFile.async('string');
+      sample = normalizedText(content.replace(/<[^>]+>/g, ' ')).slice(0, 20000);
+    }
+  } catch {}
+  return { title, author, cover: null, description: '', language: detectLanguage(sample, language), meta: {} };
+}
+
+async function probeFb2(file) {
+  let title = '';
+  let author = '';
+  let language = '';
+  let sample = '';
+  try {
+    const raw = await file.slice(0, 200000).text();
+    const doc = new DOMParser().parseFromString(raw, 'application/xml');
+    const pick = name => doc.getElementsByTagName(name)[0]?.textContent || '';
+    title = normalizedText(pick('book-title'));
+    const first = doc.getElementsByTagName('first-name')[0]?.textContent || '';
+    const last = doc.getElementsByTagName('last-name')[0]?.textContent || '';
+    author = normalizedText(`${first} ${last}`);
+    const titleInfo = Array.from(doc.getElementsByTagName('*')).find(n => (n.localName || '').toLowerCase() === 'title-info');
+    language = baseLanguage(titleInfo?.getElementsByTagName('lang')[0]?.textContent || '');
+    sample = normalizedText(raw.replace(/<[^>]+>/g, ' ')).slice(0, 20000);
+  } catch {}
+  return { title, author, cover: null, description: '', language: detectLanguage(sample, language), meta: {} };
+}
+
+/* Shared builder for text-like formats converted to simple HTML. */
+function makeTextBook(record, html) {
   const doc = document.createElement('div');
   doc.innerHTML = html;
   const { chapters, toc } = chapterize(doc, {
@@ -646,10 +720,157 @@ async function buildText(record, blob) {
     language: record.language || 'en',
     chapters,
     toc,
-    words: chapters.reduce((n, c) => n + c.words, 0),
+    words: chapters.reduce((n, c) => n + (c.words || 0), 0),
     cover: record.cover || null,
     dispose() {},
   };
+}
+
+function htmlToReading(container) {
+  container.querySelectorAll('script,style,noscript,iframe,object,embed,form,input,button,select,textarea,head,title,meta,link').forEach(n => n.remove());
+  container.querySelectorAll('*').forEach(el => {
+    for (const attr of [...el.attributes]) {
+      if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
+      else if (/^(href|src)$/i.test(attr.name) && /^\s*javascript:/i.test(attr.value)) el.removeAttribute(attr.name);
+    }
+  });
+  container.querySelectorAll('img').forEach(img => {
+    const alt = (img.getAttribute('alt') || '').trim();
+    img.replaceWith(document.createTextNode(alt ? ` ${alt} ` : ''));
+  });
+  const flat = document.createElement('div');
+  const walk = parent => {
+    for (const el of [...parent.children]) {
+      if (/^H[1-6]$/.test(el.tagName) || ['P', 'BLOCKQUOTE', 'LI', 'PRE', 'UL', 'OL', 'FIGURE', 'TABLE'].includes(el.tagName)) flat.appendChild(el);
+      else walk(el);
+    }
+  };
+  walk(container);
+  return flat.children.length ? flat : container;
+}
+
+function rtfToText(rtf = '') {
+  let out = '';
+  let depth = 0;
+  let skipDepth = -1;
+  for (let i = 0; i < rtf.length; i++) {
+    const ch = rtf[i];
+    if (ch === '{') {
+      depth++;
+      if (skipDepth < 0) {
+        if (rtf.startsWith('{\\*', i)) skipDepth = depth;
+        else if (/^\{\\(fonttbl|colortbl|stylesheet|info|pict|header|footer|object)/i.test(rtf.slice(i, i + 24))) skipDepth = depth;
+      }
+      continue;
+    }
+    if (ch === '}') {
+      if (skipDepth === depth) skipDepth = -1;
+      depth--;
+      continue;
+    }
+    if (skipDepth >= 0) continue;
+    if (ch === '\\') {
+      const rest = rtf.slice(i);
+      const word = rest.match(/^\\([a-zA-Z]+)(-?\d+)? ?/);
+      if (word) {
+        const key = word[1].toLowerCase();
+        if (key === 'par' || key === 'line') out += '\n';
+        else if (key === 'tab') out += '\t';
+        else if (key === 'u') {
+          const n = parseInt(word[2] || '0', 10);
+          out += String.fromCharCode(n < 0 ? n + 65536 : n);
+        }
+        i += word[0].length - 1;
+        continue;
+      }
+      const hex = rest.match(/^\\'([0-9a-fA-F]{2})/);
+      if (hex) {
+        out += String.fromCharCode(parseInt(hex[1], 16));
+        i += 3;
+        continue;
+      }
+      i++;
+      continue;
+    }
+    out += ch;
+  }
+  return out.replace(/\r/g, '').replace(/[ \t]+\n/g, '\n');
+}
+
+async function buildHtml(record, blob) {
+  const text = await blob.text();
+  const parsed = new DOMParser().parseFromString(text, 'text/html');
+  const container = document.createElement('div');
+  container.innerHTML = parsed.body?.innerHTML || text;
+  return makeTextBook(record, htmlToReading(container).innerHTML);
+}
+
+async function buildRtf(record, blob) {
+  const buffer = await blob.arrayBuffer();
+  let text;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(buffer); }
+  catch { text = new TextDecoder('windows-1252').decode(buffer); }
+  return makeTextBook(record, plainTextToHtml(rtfToText(text)));
+}
+
+async function buildOdt(record, blob) {
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const contentFile = zip.file('content.xml');
+  if (!contentFile) throw new Error('This ODT file is missing its content.');
+  const doc = new DOMParser().parseFromString(await contentFile.async('string'), 'application/xml');
+  const nodes = Array.from(doc.getElementsByTagName('*')).filter(n => n.localName === 'h' || n.localName === 'p');
+  const html = nodes.map(node => {
+    const text = normalizedText(node.textContent || '');
+    if (!text) return '';
+    if (node.localName === 'h') {
+      const level = Math.min(6, Math.max(1, parseInt(node.getAttribute('text:outline-level') || '1', 10) || 1));
+      return `<h${level}>${esc(text)}</h${level}>`;
+    }
+    return `<p>${esc(text)}</p>`;
+  }).join('\n');
+  return makeTextBook(record, html || plainTextToHtml(normalizedText(doc.documentElement.textContent)));
+}
+
+async function buildFb2(record, blob) {
+  const text = await blob.text();
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const body = doc.getElementsByTagName('body')[0];
+  const out = [];
+  const walk = node => {
+    for (const el of [...node.children]) {
+      const name = (el.localName || '').toLowerCase();
+      if (name === 'section' || name === 'epigraph' || name === 'poem' || name === 'annotation' || name === 'stanza') walk(el);
+      else if (name === 'title') {
+        const t = normalizedText(el.textContent || '');
+        if (t) out.push(`<h2>${esc(t)}</h2>`);
+      } else if (name === 'subtitle') {
+        const t = normalizedText(el.textContent || '');
+        if (t) out.push(`<h3>${esc(t)}</h3>`);
+      } else if (name === 'p' || name === 'v') {
+        const t = normalizedText(el.textContent || '');
+        if (t) out.push(`<p>${esc(t)}</p>`);
+      }
+    }
+  };
+  if (body) walk(body);
+  return makeTextBook(record, out.join('\n') || plainTextToHtml(normalizedText(body?.textContent || '')));
+}
+
+async function buildText(record, blob) {
+  const buffer = await blob.arrayBuffer();
+  let text;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+  } catch {
+    // Fall back for older, non-UTF-8 plain-text books.
+    text = new TextDecoder('windows-1252').decode(buffer);
+  }
+  text = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  let html;
+  if (record.format === 'md') html = markdownToHtml(text);
+  else html = plainTextToHtml(text);
+
+  return makeTextBook(record, html);
 }
 
 /* Plain text → paragraphs. Detects chapter-like lines as h2. */
@@ -660,7 +881,21 @@ function plainTextToHtml(text) {
     const t = line.trim();
     if (!t || t.length > 90) return false;
     if (/^(chapter|part|book|section|prologue|epilogue|introduction|preface|afterword|appendix)\b[\s.:\-–—]*([0-9]+|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten)?\b/i.test(t)) return true;
-    if (/^[A-Z0-9][A-Z0-9\s'’\-–—:.,!?&]+$/.test(t) && t.length >= 3 && t.length <= 60 && /[A-Z]/.test(t)) return true;
+    if (/^(cap[ií]tulo|parte|libro|pr[oó]logo|ep[ií]logo|introducci[oó]n|prefacio)\b/i.test(t)) return true;
+    if (/^(chapitre|partie|livre|prologue|épilogue|introduction|préface)\b/i.test(t)) return true;
+    if (/^(kapitel|teil|buch|prolog|epilog|einleitung|vorwort)\b/i.test(t)) return true;
+    if (/^(capitolo|parte|libro|prologo|epilogo|introduzione|prefazione)\b/i.test(t)) return true;
+    if (/^(cap[ií]tulo|parte|livro|pr[oó]logo|ep[ií]logo|introdu[cç][aã]o|pref[aá]cio)\b/i.test(t)) return true;
+    if (/^(hoofdstuk|deel|boek|proloog|epiloog|inleiding|voorwoord)\b/i.test(t)) return true;
+    if (/^(kapitel|del|bok|prolog|epilog|inledning|förord)\b/i.test(t)) return true;
+    if (/^(rozdzia[lł]|cz[eę][sś][cć]|ksi[eę]ga|prolog|epilog|wst[eę]p)\b/i.test(t)) return true;
+    if (/^(kapitola|[cč][aá]st|kniha|prolog|epilog|[uú]vod)\b/i.test(t)) return true;
+    if (/^(b[oö]l[uü]m|k[iı]s[iı]m|kitap|[oö]ns[oö]z)\b/i.test(t)) return true;
+    if (/^(глава|часть|книга|пролог|эпилог|введение)\b/i.test(t)) return true;
+    if (/^(अध्याय|भाग)\b/.test(t)) return true;
+    if (/^(الفصل|الجزء)\b/.test(t)) return true;
+    if (/^第\s*[0-9一二三四五六七八九十百]+\s*[章回节節]/.test(t)) return true;
+    if (/^[\p{Lu}\p{N}][\p{Lu}\p{N}\s'’\-–—:.,!?&]+$/u.test(t) && t.length >= 3 && t.length <= 60 && /\p{Lu}/u.test(t)) return true;
     if (/^[*\-–—_=]{3,}$/.test(t)) return false;
     return false;
   };

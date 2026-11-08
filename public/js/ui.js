@@ -235,7 +235,7 @@ export function coverBox(book, cls = '', mini = false) {
 }
 
 export function formatLabel(format = '') {
-  const map = { epub: 'EPUB', pdf: 'PDF', docx: 'DOCX', txt: 'TXT', md: 'MD', cbz: 'CBZ', cbr: 'CBR' };
+  const map = { epub: 'EPUB', pdf: 'PDF', docx: 'DOCX', odt: 'ODT', rtf: 'RTF', html: 'HTML', fb2: 'FB2', txt: 'TXT', md: 'MD', cbz: 'CBZ', cbr: 'CBR' };
   return map[format] || String(format || 'BOOK').toUpperCase();
 }
 
@@ -271,6 +271,7 @@ export function shortcutsModal() {
     ['Bookmark this spot', ['B']],
     ['Open contents', ['C']],
     ['Reading appearance', ['A']],
+    ['Jump to a page or chapter', ['G']],
     ['Close panels / reader', ['Esc']],
     ['Add a book (library)', ['⌘', 'O']],
     ['Search library', ['/']],

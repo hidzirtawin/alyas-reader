@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Alya’s Reader — your reading room</title>
-<meta name="description" content="A calm, local-first ebook and comic reader with natural narration. Upload EPUB, PDF, Word, CBZ or CBR files.">
+<meta name="description" content="A calm, local-first ebook and comic reader with natural narration. Upload EPUB, PDF, Word, ODT, RTF, HTML, FB2, comics or text files.">
 <meta name="theme-color" content="#1b1814">
 <meta name="app-build" content="20261108-3">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -127,11 +127,11 @@
   <div class="drop-card">
     <div class="drop-icon"><svg><use href="#i-upload"/></svg></div>
     <h2>Drop your book here</h2>
-    <p>EPUB, PDF, Word, TXT or Markdown</p>
+    <p>EPUB, PDF, Word, ODT, RTF, HTML, FB2, TXT or Markdown</p>
   </div>
 </div>
 
-<input type="file" id="fileInput" multiple accept=".epub,.pdf,.docx,.txt,.md,.markdown,.cbz,.cbr,.zip,application/epub+zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.comicbook+zip,application/vnd.comicbook-rar,application/x-cbz,application/x-cbr" hidden>
+<input type="file" id="fileInput" multiple accept=".epub,.pdf,.docx,.odt,.rtf,.html,.htm,.xhtml,.fb2,.txt,.text,.log,.rst,.md,.markdown,.cbz,.cbr,.zip,application/epub+zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text,application/rtf,text/rtf,text/html,application/x-fictionbook+xml,application/vnd.comicbook+zip,application/vnd.comicbook-rar,application/x-cbz,application/x-cbr" hidden>
 
 <!-- ░░ Reader ░░ -->
 <section class="reader" id="reader" aria-hidden="true" inert aria-label="Reader">
@@ -166,7 +166,7 @@
     <button class="tts-play" data-tts="toggle" title="Play / pause" aria-label="Play or pause"><svg><use href="#i-play"/></svg></button>
     <button class="icon-btn" data-tts="next" title="Next sentence" aria-label="Next sentence"><svg><use href="#i-next"/></svg></button>
     <div class="tts-info">
-      <span id="ttsVoiceLabel" class="tts-voice">System voice</span>
+      <span id="ttsVoiceLabel" class="tts-voice">Piper voice</span>
       <span id="ttsPos" class="tts-pos">—</span>
     </div>
     <button class="tts-chip" data-tts="speed" title="Playback speed" id="ttsSpeedBtn">1.0×</button>
@@ -202,6 +202,7 @@
       <button data-hlcolor="rose" class="dot rose" aria-label="Highlight rose"></button>
     </div>
     <span class="sel-sep"></span>
+    <button data-sel="define" title="Look up a word"><svg><use href="#i-search"/></svg> Define</button>
     <button data-sel="listen" title="Read from here"><svg><use href="#i-volume"/></svg> Listen</button>
     <button data-sel="copy" title="Copy"><svg><use href="#i-copy"/></svg></button>
     <button data-sel="note" title="Highlight with a note"><svg><use href="#i-note"/></svg></button>

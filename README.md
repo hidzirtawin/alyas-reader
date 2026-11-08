@@ -1,6 +1,6 @@
 # Alya’s Reader
 
-A calm, local-first ebook and comic reader for your own files. Upload **EPUB, PDF, DOCX, TXT, Markdown, CBZ or CBR**, read in the typography you like, and listen with a natural voice — or turn narration off and read in silence.
+A calm, local-first ebook and comic reader for your own files. Upload **EPUB, PDF, DOCX, ODT, RTF, HTML, FB2, TXT, Markdown, CBZ or CBR**, read in the typography you like, and listen with a natural voice — or turn narration off and read in silence.
 
 Your books stay in your browser. No accounts, no cloud library, no uploads. Voice models download once from the open Piper catalog.
 
@@ -23,12 +23,17 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 - **EPUB** — custom renderer with chapter spine, table of contents, internal links, images, per-chapter progress and word counts. DRM-protected EPUBs are not supported.
 - **PDF** — full PDF.js viewer with lazy page rendering, selectable text, zoom, outline navigation and page jump. Bookmarks and narration work per page.
 - **DOCX** — imported with Mammoth, including headings, lists, tables, emphasis and embedded images. Word documents are split into chapters at heading boundaries.
+- **HTML / ODT / RTF / FB2** — HTML is sanitised and flattened into readable chapters, ODT reads the OpenDocument text, RTF is converted to clean paragraphs, and FB2 fiction books keep their sections and titles.
 - **TXT / Markdown** — plain-text chapter detection, plus a safe Markdown renderer for headings, lists, quotes, code, links and emphasis.
 - **Comics (CBZ / CBR)** — page-by-page viewer with natural page ordering, ComicInfo.xml metadata, first-page covers, a page-number grid, jump-to-page, zoom and swipe/keyboard page turns. CBR support uses a bundled WASM build of libarchive (RAR v4 and v5).
-- **Natural narration** — the full **Piper** catalog: 179 free neural voices across 30+ languages, including American, British, Scottish, Northern/Southern English and Australian accents. Runs locally in the browser, with optional device voices as a fallback.
+- **Natural narration** — the full **Piper** catalog: 179 free neural voices across 30+ languages, including American, British, Scottish, Northern/Southern English and Australian accents. Runs locally in the browser — the default is an audiobook-style voice that downloads once in the background.
 - **Silent reading** — switch narration off entirely in Settings or the voice picker. The reader becomes text-only and the Listen controls disappear.
 - **Listen along** — sentence-by-sentence playback with highlighting, auto-scroll, previous/next sentence, speed control, and automatic chapter (or PDF page) advance. Comic pages are images, so narration is unavailable there.
-- **Make it yours** — six typefaces, four themes (Paper, Sepia, Night, Black), text size, line height, measure, paragraph spacing, justification and hyphenation.
+- **Languages** — books are detected automatically (script and stop-word analysis, plus EPUB/ODT/FB2 metadata). Non-English books use a matching Piper voice when one is available, and hyphenation follows the book’s language.
+- **Dictionary** — select a word and tap **Define**, or double-click it. A public-domain Webster’s 1913 dictionary is stored offline; other languages also get a Wiktionary link.
+- **Go to** — press `G` to jump to any page in a PDF or comic, or to any chapter and position in a reflowable book.
+- **Make it yours** — 13 typefaces in a dropdown (Literata, Merriweather, Lora, EB Garamond, Libre Baskerville, Source Serif 4, Georgia, Palatino, Atkinson, Lexend, Inter, OpenDyslexic and System), four themes (Paper, Sepia, Night, Black), text size, line height, measure, paragraph and letter/word spacing, justification and hyphenation.
+- **Dyslexia-friendly mode** — one tap sets OpenDyslexic, larger text, roomy lines, wider letter/word spacing and left-aligned text.
 - **Marks & notes** — bookmarks and four-colour highlights with notes. Everything is grouped by book and reopens at the exact spot.
 - **Autosave** — position, settings, bookmarks and highlights are saved as you read. Comic progress and bookmarks are page-based. Export a JSON backup of notes and progress at any time.
 - **Keyboard-first** — see shortcuts below.
@@ -50,19 +55,11 @@ Alya’s Reader runs [Piper](https://github.com/rhasspy/piper) (MIT) entirely in
 - **Cinema-style originals** — noir, leading lady, leading man, epic trailer and stage presets, named by genre rather than by real performers
 - **Character archetypes** — suave spy, wise elder, West Coast cool and news anchor, written as generic styles rather than impersonations
 
-The first time you use a voice, its model is downloaded from Hugging Face and stored in the browser. Models range from about 20 MB to 115 MB; after that the voice works offline. No account or API key is involved, and your book text never leaves your device.
+The default voice is **LibriVox-style** (LibriTTS, 2,306 speakers). It starts downloading in the background the first time you open the app, with a progress bar, and is cached for offline use. The first time you choose any other voice, its model is downloaded from Hugging Face and stored in the browser. Models range from about 20 MB to 115 MB; after that the voice works offline. No account or API key is involved, and your book text never leaves your device.
 
 The Australian voice is a community LibriVox model by DataCraftsmanAustralia, licensed **CC-BY-4.0**. Its ten speakers are available in the speaker picker.
 
 **Not included:** a Texas-drawl preset, celebrity clones, or the proprietary narrators used by Audible, Libby and OverDrive. Those narrators are human or licensed voices, and unauthorized impersonations are intentionally excluded. The audiobook presets are original Piper voices chosen for a similar feel.
-
-### System voices (free)
-
-Alya’s Reader also lists the English voices installed on your device. On macOS, more natural voices are available in:
-
-**System Settings → Accessibility → Spoken Content → System Voice → Manage Voices**
-
-Download any “Enhanced” or “Premium” English voice; it will appear after a reload. Speed, pitch and highlighting are adjustable.
 
 ### No voice at all
 
@@ -168,6 +165,7 @@ public/
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) (MIT) — browser/WASM wrapper and worker runtime
 - [Piper voice models](https://huggingface.co/rhasspy/piper-voices) (MIT) — official voice catalog
 - [Australian LibriVox Piper voice](https://huggingface.co/DataCraftsmanAustralia/piper-en_AU-librivox-medium) by DataCraftsmanAustralia (CC-BY-4.0)
-- Typefaces: Literata, Atkinson Hyperlegible, Inter and Fraunces (SIL Open Font License), served locally from Fontsource builds.
+- [Webster’s English Dictionary](https://github.com/matthewreagan/WebstersEnglishDictionary) — public-domain Webster’s Unabridged 1913 data
+- Typefaces: Literata, Merriweather, Lora, EB Garamond, Libre Baskerville, Source Serif 4, Atkinson Hyperlegible, Lexend, Inter, OpenDyslexic and Fraunces (SIL Open Font License), served locally from Fontsource builds.
 
 Built for quiet afternoons and long train rides.

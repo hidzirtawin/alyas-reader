@@ -52,19 +52,18 @@ Alya’s Reader runs [Piper](https://github.com/rhasspy/piper) (MIT) entirely in
 
 - **179 voices** across 30+ languages
 - American, British, Scottish, Northern English, Southern English and **Australian** accents
-- Multi-speaker models with a speaker picker
+- Multi-speaker models with a searchable, expandable speaker browser
 - Adjustable speed and a **pause-between-sentences** control for natural reading rhythm
 - A live **download progress bar** (percent and megabytes) in the voice picker and the reading dock
-- **Audiobook-style presets** for warm, classic, British and studio narration, plus a **LibriVox-style** LibriTTS voice trained on volunteer audiobook recordings
-- **Cinema-style originals** — noir, leading lady, leading man, epic trailer and stage presets, named by genre rather than by real performers
-- **Character archetypes** — suave spy, wise elder, West Coast cool and news anchor, written as generic styles rather than impersonations
+- The full **LibriVox (LibriTTS)** catalog exposes all **2,306 speakers** in a searchable list — browse 60 at a time or search by name/number
+- The voice/speaker you pick appears in a visible chip in the reader header; tap it to change voices
 - **Regional accents from open research corpora** — VCTK British, Scottish, Northern Irish, Irish, Welsh, South African, Indian and New Zealand English; four Australian voices from the AU LibriVox model (Matilda, Marlo, Banjo and Flynn); L2-ARCTIC Mandarin-, Hindi-, Vietnamese- and Korean-accented English
 
-The default voice is **LibriVox-style** (LibriTTS, 2,306 speakers). It starts downloading in the background the first time you open the app, with a progress bar, and is cached for offline use. The first time you choose any other voice, its model is downloaded from Hugging Face and stored in the browser. Models range from about 20 MB to 115 MB; after that the voice works offline. No account or API key is involved, and your book text never leaves your device.
+The default voice is **LibriVox (LibriTTS)** with 2,306 speakers. It starts downloading in the background the first time you open the app, with a progress bar, and is cached for offline use. The first time you choose any other voice, its model is downloaded from Hugging Face and stored in the browser. Models range from about 20 MB to 115 MB; after that the voice works offline. No account or API key is involved, and your book text never leaves your device.
 
 The Australian voice is a community LibriVox model by DataCraftsmanAustralia, licensed **CC-BY-4.0**. Its ten speakers are available in the speaker picker.
 
-**Not included:** a Texas-drawl preset, celebrity clones, or the proprietary narrators used by Audible, Libby and OverDrive. Those narrators are human or licensed voices, and unauthorized impersonations are intentionally excluded. The audiobook presets are original Piper voices chosen for a similar feel.
+**Not included:** a Texas-drawl preset, celebrity clones, or the proprietary narrators used by Audible, Libby and OverDrive. Those narrators are human or licensed voices, and unauthorized impersonations are intentionally excluded. The audiobook and accent voices are original open Piper voices chosen for a similar feel.
 
 ### Importing a voice
 

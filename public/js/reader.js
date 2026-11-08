@@ -8,7 +8,7 @@ import {
 import { buildReflowable, buildComicBook, isComicFormat } from './renderers.js';
 import { PdfView } from './pdfview.js';
 import { ComicView } from './comicview.js';
-import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage } from './tts.js';
+import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName, OPENAI_VOICES } from './tts.js';
 import {
   toast, modal, confirmDialog, contextMenu, closeAllModals, shortcutsModal,
   formatLabel, isModalOpen,
@@ -119,6 +119,7 @@ export async function openReader(app, bookId, target = {}) {
   });
 
   wireEvents(state);
+  updateReaderVoiceChip(state);
   app.pauseTTS = () => state.engine?.pause();
   app.stopTTS = () => { state.engine?.stop(); closeTTS(state); };
 
@@ -192,6 +193,7 @@ function getRefs() {
     stage: $('#readerStage'),
     readerBookTitle: $('#readerBookTitle'),
     readerChapterTitle: $('#readerChapterTitle'),
+    readerVoiceChip: $('#readerVoiceChip'),
     readerBack: $('#readerBack'),
     tocBtn: $('#tocBtn'),
     bmBtn: $('#bmBtn'),
@@ -340,6 +342,19 @@ function wireEvents(state) {
     }
   };
 
+  refs.readerVoiceChip.onclick = () => {
+    openVoiceModal({
+      onSaved: () => {
+        updateVoiceLabel(state);
+        updateReaderVoiceChip(state);
+        state.engine.applyVoiceChange();
+        applyBookVoice(state);
+      },
+    });
+  };
+  refs.readerVoiceChip.onkeydown = e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); refs.readerVoiceChip.click(); }
+  };
   refs.footLeft.onclick = () => openToc(state);
   refs.footPrev.onclick = () => {
     if (state.mode === 'pdf') state.pdfView?.scrollToPage(Math.max(1, (state.page || 1) - 1), { smooth: true });
@@ -1175,19 +1190,23 @@ function applyBookVoice(state) {
   const bookLang = baseLanguage(state.book?.language || state.record?.language || '');
   if (!tts.enabled || tts.provider !== 'piper' || tts.autoLanguageVoice === false || !bookLang || bookLang === 'en') {
     engine.setVoiceOverride(null);
+    updateReaderVoiceChip(state);
     return;
   }
   const current = piperVoiceById(tts.piperVoice);
   if (languageMatches(current?.lang, bookLang)) {
     engine.setVoiceOverride(null);
+    updateReaderVoiceChip(state);
     return;
   }
   const match = piperVoiceForLanguage(bookLang);
   if (!match) {
     engine.setVoiceOverride(null);
+    updateReaderVoiceChip(state);
     return;
   }
   engine.setVoiceOverride({ voiceId: match.id, speaker: 0, name: match.name });
+  updateReaderVoiceChip(state);
   if (!state.languageVoiceNotice) {
     toast(`Using ${match.name} for this ${languageName(bookLang)} book`, 'info');
     state.languageVoiceNotice = true;
@@ -1454,6 +1473,30 @@ function updateVoiceLabel(state) {
   if (!refs) return;
   const override = state?.engine?.voice;
   refs.ttsVoiceLabel.textContent = override?.name ? `Piper · ${override.name}` : describeVoice();
+  updateReaderVoiceChip(state);
+}
+
+function updateReaderVoiceChip(state) {
+  if (!refs?.readerVoiceChip) return;
+  const tts = getPrefs().tts;
+  let label;
+  if (!tts.enabled) {
+    label = 'Silent reading';
+  } else if (tts.provider === 'openai') {
+    const v = OPENAI_VOICES.find(x => x.id === tts.openaiVoice);
+    label = `OpenAI · ${v?.name || 'Voice'}`;
+  } else {
+    const override = state?.engine?.voice;
+    if (override?.name) {
+      label = `Piper · ${override.name}`;
+    } else {
+      const v = piperVoiceById(tts.piperVoice);
+      const sp = piperSpeakerName(v, tts.piperSpeaker);
+      label = `Piper · ${v.name}${sp ? ` · ${sp}` : ''}`;
+    }
+  }
+  refs.readerVoiceChip.innerHTML = `${icon('volume')}<span>${esc(label)}</span>`;
+  refs.readerVoiceChip.title = `Voice: ${label} · Click to change`;
 }
 
 function updateSpeedLabel() {

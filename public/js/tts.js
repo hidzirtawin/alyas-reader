@@ -67,7 +67,8 @@ export function getPiperVoices() {
 
 export function loadPiperCatalog() {
   if (piperCatalogPromise) return piperCatalogPromise;
-  piperCatalogPromise = fetch(new URL('../vendor/piper/voices.json', import.meta.url))
+  const build = document.querySelector('meta[name="app-build"]')?.content || 'dev';
+  piperCatalogPromise = fetch(new URL(`../vendor/piper/voices.json?v=${build}`, import.meta.url), { cache: 'no-cache' })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('catalog missing')))
     .then(async data => {
       const list = Array.isArray(data) ? data : data.voices || [];
@@ -248,82 +249,6 @@ export function piperProgressLabel(p = piperProgress) {
    proprietary voices. The LibriVox preset uses LibriTTS, a model trained
    on LibriVox volunteer audiobook recordings. */
 export const PIPER_PRESETS = [
-  {
-    id: 'audiobook-warm', name: 'Audiobook · Warm', voiceId: 'en_US-lessac-high',
-    speaker: 0, rate: 0.95, desc: 'Measured, warm American female narration.',
-  },
-  {
-    id: 'audiobook-classic', name: 'Audiobook · Classic', voiceId: 'en_US-ryan-high',
-    speaker: 0, rate: 0.95, desc: 'Deep, unhurried American male narrator.',
-  },
-  {
-    id: 'audiobook-british', name: 'Audiobook · British', voiceId: 'en_GB-alan-medium',
-    speaker: 0, rate: 0.95, desc: 'Dry British male voice for classic fiction.',
-  },
-  {
-    id: 'audiobook-studio', name: 'Audiobook · Studio', voiceId: 'en_GB-cori-high',
-    speaker: 0, rate: 0.97, desc: 'Crisp British female studio read.',
-  },
-  {
-    id: 'studio-female', name: 'Studio · American', voiceId: 'en_US-hfc_female-medium',
-    speaker: 0, rate: 1, desc: 'Bright, modern American female voice.',
-  },
-  {
-    id: 'studio-male', name: 'Studio · American male', voiceId: 'en_US-hfc_male-medium',
-    speaker: 0, rate: 1, desc: 'Clear, neutral American male voice.',
-  },
-  {
-    id: 'librivox', name: 'LibriVox-style', tag: 'LibriVox',
-    voiceId: 'en_US-libritts_r-medium', speaker: 0, rate: 0.96,
-    desc: 'Trained on LibriVox audiobooks · 2,306 speakers.',
-  },
-  /* Cinema-inspired originals. Named by genre, never by a real performer. */
-  {
-    id: 'cinema-noir', name: 'Cinema · Noir', group: 'cinema',
-    voiceId: 'en_US-joe-medium', speaker: 0, rate: 0.9,
-    desc: 'Low, world-weary detective narration.',
-  },
-  {
-    id: 'cinema-leading-lady', name: 'Cinema · Leading lady', group: 'cinema',
-    voiceId: 'en_US-kristin-medium', speaker: 0, rate: 0.95,
-    desc: 'Bright, cinematic American female lead.',
-  },
-  {
-    id: 'cinema-leading-man', name: 'Cinema · Leading man', group: 'cinema',
-    voiceId: 'en_US-mike-medium', speaker: 0, rate: 0.95,
-    desc: 'Confident, warm American male lead.',
-  },
-  {
-    id: 'cinema-epic', name: 'Cinema · Epic', group: 'cinema',
-    voiceId: 'en_US-bryce-medium', speaker: 0, rate: 0.88,
-    desc: 'Slow, widescreen trailer narration.',
-  },
-  {
-    id: 'cinema-stage', name: 'Cinema · Stage', group: 'cinema',
-    voiceId: 'en_GB-northern_english_male-medium', speaker: 0, rate: 0.9,
-    desc: 'Theatrical northern British delivery.',
-  },
-  /* Character archetypes. Generic genres only — never a real performer. */
-  {
-    id: 'character-spy', name: 'Character · Suave spy', group: 'character',
-    voiceId: 'en_GB-alan-medium', speaker: 0, rate: 0.93,
-    desc: 'Smooth, dry British spy-thriller delivery.',
-  },
-  {
-    id: 'character-elder', name: 'Character · Wise elder', group: 'character',
-    voiceId: 'en_US-norman-medium', speaker: 0, rate: 0.9,
-    desc: 'Calm, weathered storyteller with a measured pace.',
-  },
-  {
-    id: 'character-cool', name: 'Character · West Coast cool', group: 'character',
-    voiceId: 'en_US-sam-medium', speaker: 0, rate: 0.94,
-    desc: 'Relaxed, laid-back American delivery.',
-  },
-  {
-    id: 'character-anchor', name: 'Character · News anchor', group: 'character',
-    voiceId: 'en_US-ljspeech-high', speaker: 0, rate: 1,
-    desc: 'Crisp, neutral broadcast read.',
-  },
   /* Regional and L2 English accents from the open VCTK and L2-ARCTIC corpora. */
   { id: 'accent-british-london', name: 'British · London', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 81, rate: 0.96, desc: 'London English, male speaker.' },
   { id: 'accent-british-birmingham', name: 'British · Birmingham', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 104, rate: 0.96, desc: 'Birmingham English, male speaker.' },

@@ -514,7 +514,7 @@ export async function openVoiceModal({ onSaved } = {}) {
         <span class="track"></span><span class="switch-label">Highlight the sentence being read</span>
       </label>
     </div>
-    <div class="callout" style="margin-top:16px">${icon('shield')}<span>Piper runs entirely in this browser. Voice models download once and are cached in your browser; your book text never leaves this device. Voices are original character voices, not celebrity impersonations. A licensed Texas-drawl preset isn’t available in the open voice set.</span></div>
+    <div class="callout" style="margin-top:16px">${icon('shield')}<span>Piper runs entirely in this browser. Voice models download once and are cached in your browser; your book text never leaves this device. Voices are original open voices, not celebrity impersonations.</span></div>
   `;
 
   const foot = document.createElement('div');
@@ -524,7 +524,7 @@ export async function openVoiceModal({ onSaved } = {}) {
   const m = modal({
     eyebrow: 'Narration',
     title: 'Choose how Alya’s Reader speaks',
-    subtitle: 'Free, offline neural voices from Piper — audiobook, cinema and character styles.',
+    subtitle: 'Free offline Piper voices, regional accents and optional OpenAI cloud voices.',
     body,
     foot,
     wide: true,
@@ -618,34 +618,19 @@ export async function openVoiceModal({ onSaved } = {}) {
     const languages = [...new Set(all.map(v => v.language).filter(Boolean))].sort((a, b) => (a === 'English' ? -1 : b === 'English' ? 1 : a.localeCompare(b)));
     return `
       <div class="presets">
-        <div class="presets-head"><span>Narration styles</span><span class="dim">Audiobook, cinema &amp; character</span></div>
-        ${[
-          ['audiobook', 'Audiobook-inspired'],
-          ['cinema', 'Cinema-inspired originals'],
-          ['character', 'Character archetypes'],
-          ['accent', 'Regional accents'],
-        ].map(([group, title]) => {
-          const items = PIPER_PRESETS.filter(p => (p.group || 'audiobook') === group);
-          const cards = `<div class="preset-grid">
-              ${items.map(p => {
-                const active = p.voiceId === draft.piperVoice
-                  && Number(p.speaker || 0) === Number(draft.piperSpeaker || 0)
-                  && Math.abs(Number(p.rate ?? draft.rate) - Number(draft.rate)) < 0.001;
-                return `<button class="preset${active ? ' is-active' : ''}" data-preset="${esc(p.id)}">
-                  <span class="preset-name">${esc(p.name)}${p.tag ? `<em>${esc(p.tag)}</em>` : ''}</span>
-                  <span class="preset-desc">${esc(p.desc)}</span>
-                </button>`;
-              }).join('')}
-            </div>`;
-          if (group === 'accent') {
-            return `<details class="preset-details" open><summary>${title} <span>${items.length} British, African, Asian and Oceania voices · VCTK + L2-ARCTIC</span></summary>
-              <p class="preset-source">Real accent characteristics from the open VCTK and L2-ARCTIC research corpora. These are original open voices, not celebrity impersonations.</p>
-              ${cards}
-            </details>`;
-          }
-          return `<div class="preset-subhead">${title}</div>${cards}`;
-        }).join('')}
-        <p class="preset-note">Celebrity, Audible, Libby and OverDrive narrators are real people or licensed voices. These presets are original open Piper voices — no real person is cloned or impersonated. Regional accents come from the open <strong>VCTK</strong> and <strong>L2-ARCTIC</strong> research corpora; they are real accent characteristics, not impersonations. <strong>LibriVox-style</strong> uses LibriTTS, trained on volunteer LibriVox recordings.</p>
+        <div class="presets-head"><span>Regional accents</span><span class="dim">${PIPER_PRESETS.length} voices · VCTK · L2-ARCTIC · AU</span></div>
+        <div class="preset-grid">
+          ${PIPER_PRESETS.map(p => {
+            const active = p.voiceId === draft.piperVoice
+              && Number(p.speaker || 0) === Number(draft.piperSpeaker || 0)
+              && Math.abs(Number(p.rate ?? draft.rate) - Number(draft.rate)) < 0.001;
+            return `<button class="preset${active ? ' is-active' : ''}" data-preset="${esc(p.id)}">
+              <span class="preset-name">${esc(p.name)}${p.tag ? `<em>${esc(p.tag)}</em>` : ''}</span>
+              <span class="preset-desc">${esc(p.desc)}</span>
+            </button>`;
+          }).join('')}
+        </div>
+        <p class="preset-note">Original open voices from the <strong>VCTK</strong>, <strong>L2-ARCTIC</strong> and Australian LibriVox corpora. These are real accent characteristics, not celebrity impersonations.</p>
       </div>
       <div class="custom-import">
         <button class="btn btn-sm" id="importVoice">${icon('upload')} Import a Piper voice</button>
@@ -716,40 +701,66 @@ export async function openVoiceModal({ onSaved } = {}) {
     if (!v || v.num_speakers <= 1) { wrap.innerHTML = ''; return; }
     const entries = Object.entries(v.speaker_id_map || {}).sort((a, b) => Number(a[1]) - Number(b[1]));
     const list = entries.length ? entries : Array.from({ length: v.num_speakers }, (_, i) => [`Speaker ${i}`, i]);
-    const many = list.length > 80;
-    const selectedId = Number(draft.piperSpeaker) || 0;
     const label = raw => {
       const text = String(raw);
       return /^p?\d+$/i.test(text)
         ? `Voice ${text.replace(/^p/i, '')}`
         : text.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     };
-    wrap.innerHTML = `<div class="field" style="margin:4px 0 12px">
-      <label for="vmPiperSpeaker">Speaker <span class="dim" style="font-weight:400">· ${list.length.toLocaleString()} available</span></label>
-      ${many ? `<input class="input" id="vmPiperSpeakerSearch" placeholder="Search ${list.length.toLocaleString()} speakers" autocomplete="off" style="height:34px;margin-bottom:6px">
-      <div class="speaker-count" id="vmPiperSpeakerCount"></div>` : ''}
-      <select class="select" id="vmPiperSpeaker"></select>
+    let selectedId = Number(draft.piperSpeaker) || 0;
+    const many = list.length > 12;
+    let query = '';
+    let limit = list.length > 120 ? 60 : list.length;
+
+    wrap.innerHTML = `<div class="speaker-panel">
+      <div class="speaker-panel-head">
+        <span>Speaker <span class="dim">· ${list.length.toLocaleString()} available</span></span>
+        <span class="speaker-chosen" id="speakerChosen"></span>
+      </div>
+      ${many ? `<input class="input" id="vmPiperSpeakerSearch" placeholder="Search ${list.length.toLocaleString()} speakers" autocomplete="off" spellcheck="false">` : ''}
+      <div class="speaker-grid" id="speakerGrid"></div>
+      <button class="btn btn-sm speaker-more" id="speakerMore" type="button" hidden></button>
     </div>`;
 
-    const select = wrap.querySelector('#vmPiperSpeaker');
+    const grid = wrap.querySelector('#speakerGrid');
     const search = wrap.querySelector('#vmPiperSpeakerSearch');
-    const count = wrap.querySelector('#vmPiperSpeakerCount');
-    const fill = (query = '') => {
+    const more = wrap.querySelector('#speakerMore');
+    const chosen = wrap.querySelector('#speakerChosen');
+
+    const render = () => {
       const q = query.trim().toLowerCase();
-      let matches = q ? list.filter(([name, id]) => `${label(name)} ${id}`.toLowerCase().includes(q)) : list;
+      const matches = q
+        ? list.filter(([name, id]) => `${label(name)} ${id}`.toLowerCase().includes(q))
+        : list;
       const current = list.find(([, id]) => Number(id) === selectedId);
-      const limit = q ? 80 : (many ? 60 : matches.length);
       const shown = matches.slice(0, limit);
       if (current && !shown.some(([, id]) => Number(id) === selectedId)) shown.unshift(current);
-      select.innerHTML = shown.map(([name, id]) => `<option value="${Number(id)}"${Number(id) === selectedId ? ' selected' : ''}>${esc(label(name))}</option>`).join('');
-      if (count) {
-        count.textContent = q
-          ? `${matches.length} matching speaker${matches.length === 1 ? '' : 's'}${matches.length > limit ? ` · showing first ${limit}` : ''}`
-          : `Showing first ${shown.length} of ${list.length.toLocaleString()} — type to narrow.`;
-      }
+      grid.innerHTML = shown.length
+        ? shown.map(([name, id]) => `<button type="button" class="speaker-chip${Number(id) === selectedId ? ' is-active' : ''}" data-speaker-id="${Number(id)}">${esc(label(name))}</button>`).join('')
+        : '<div class="voice-none">No speakers match that search.</div>';
+      more.hidden = matches.length <= limit;
+      more.textContent = `Show more · ${Math.min(limit, matches.length)} of ${matches.length}`;
+      chosen.textContent = `Selected: ${label(current?.[0] || `Speaker ${selectedId}`)}`;
     };
-    fill('');
-    search?.addEventListener('input', () => fill(search.value));
+
+    grid.addEventListener('click', event => {
+      const btn = event.target.closest('[data-speaker-id]');
+      if (!btn) return;
+      selectedId = Number(btn.dataset.speakerId);
+      draft.piperSpeaker = selectedId;
+      render();
+      updatePiperNote();
+    });
+    search?.addEventListener('input', () => {
+      query = search.value;
+      limit = query ? 60 : (list.length > 120 ? 60 : list.length);
+      render();
+    });
+    more.addEventListener('click', () => {
+      limit += 120;
+      render();
+    });
+    render();
   }
 
   function updatePiperNote() {
@@ -868,9 +879,6 @@ export async function openVoiceModal({ onSaved } = {}) {
       draft.openaiInstructions = e.target.value;
     } else if (id === 'vmPiperSearch') {
       renderPiperList();
-    } else if (id === 'vmPiperSpeaker') {
-      draft.piperSpeaker = Number(e.target.value);
-      updatePiperNote();
     }
   });
 
@@ -880,10 +888,6 @@ export async function openVoiceModal({ onSaved } = {}) {
     else if (e.target.id === 'vmPiperLang') renderPiperList();
     else if (e.target.id === 'vmOpenaiVoice') { draft.openaiVoice = e.target.value; }
     else if (e.target.id === 'vmOpenaiModel') { draft.openaiModel = e.target.value; renderTabs(); }
-    else if (e.target.id === 'vmPiperSpeaker') {
-      draft.piperSpeaker = Number(e.target.value);
-      updatePiperNote();
-    }
   });
 
 

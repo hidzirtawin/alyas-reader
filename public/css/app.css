@@ -929,6 +929,20 @@ textarea.input { height: auto; min-height: 84px; padding: 11px 13px; resize: ver
 .foot-nav-label:hover { color: var(--reader-ink); text-decoration-color: currentColor; }
 
 ::highlight(lumen-tts) { background-color: color-mix(in srgb, var(--accent) 26%, transparent); color: inherit; }
+::highlight(lumen-search) { background-color: color-mix(in srgb, #e9b94c 62%, transparent); color: inherit; }
+.book-search-form { display: flex; gap: 8px; margin-bottom: 10px; }
+.book-search-form .input { height: 38px; flex: 1; }
+.book-search-meta { font-size: 10.5px; color: var(--ink-3); margin-bottom: 8px; }
+.book-search-results { display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow-y: auto; }
+.search-result {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  padding: 9px 11px; border-radius: 9px; border: 1px solid transparent;
+  transition: background .14s, border-color .14s;
+}
+.search-result:hover { background: var(--surface-2); border-color: var(--line); }
+.sr-chapter { font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); }
+.sr-snippet { font-size: 11.5px; line-height: 1.5; color: var(--ink-2); }
+.sr-snippet mark { background: color-mix(in srgb, #e9b94c 45%, transparent); color: var(--ink); border-radius: 2px; padding: 0 1px; }
 ::highlight(lumen-tts) { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 60%, transparent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .tts-block-hl { background: color-mix(in srgb, var(--accent) 18%, transparent) !important; border-radius: 2px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
 

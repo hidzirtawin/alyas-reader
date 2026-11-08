@@ -1962,6 +1962,129 @@ function handleTypeChange(state, e) {
    Menus / actions
    ═══════════════════════════════════════════════════════════════════ */
 
+function chapterSearchText(chapter) {
+  if (!chapter?.html) return '';
+  const holder = document.createElement('div');
+  holder.innerHTML = chapter.html;
+  holder.querySelectorAll('p,div,li,h1,h2,h3,h4,h5,h6,blockquote').forEach(el => el.append(document.createTextNode(' ')));
+  return normalizedText(holder.textContent || '');
+}
+
+function snippetHtml(text, at, length) {
+  const start = Math.max(0, at - 48);
+  const end = Math.min(text.length, at + length + 56);
+  const before = text.slice(start, at).replace(/\s+/g, ' ');
+  const match = text.slice(at, at + length);
+  const after = text.slice(at + length, end).replace(/\s+/g, ' ');
+  return `${start > 0 ? '…' : ''}${esc(before)}<mark>${esc(match)}</mark>${esc(after)}${end < text.length ? '…' : ''}`;
+}
+
+function searchBookText(state, query) {
+  if (!state.searchTexts) {
+    state.searchTexts = state.book.chapters.map(chapterSearchText);
+  }
+  const needle = query.toLowerCase();
+  const results = [];
+  for (let ci = 0; ci < state.searchTexts.length; ci++) {
+    const text = state.searchTexts[ci];
+    const lower = text.toLowerCase();
+    let from = 0;
+    let occurrence = 0;
+    while (occurrence < 5) {
+      const at = lower.indexOf(needle, from);
+      if (at < 0) break;
+      results.push({
+        chapterIndex: ci,
+        chapterLabel: state.book.chapters[ci].label || `Chapter ${ci + 1}`,
+        snippet: snippetHtml(text, at, needle.length),
+        occurrence,
+      });
+      occurrence++;
+      from = at + needle.length;
+      if (results.length >= 80) return results;
+    }
+  }
+  return results;
+}
+
+function scrollToSearchHit(state, query, occurrence) {
+  const article = state.article;
+  if (!article) return;
+  const map = buildTextMap(article);
+  const lower = map.text.toLowerCase();
+  const needle = query.toLowerCase();
+  let at = -1;
+  for (let i = 0; i <= occurrence; i++) {
+    at = lower.indexOf(needle, at + 1);
+    if (at < 0) break;
+  }
+  if (at < 0) return;
+  const range = rangeFromOffsets(map, at, at + needle.length);
+  if (!range) return;
+  scrollRangeIntoView(range);
+  if (window.CSS?.highlights && window.Highlight) {
+    try {
+      CSS.highlights.set('lumen-search', new Highlight(range));
+      setTimeout(() => { CSS.highlights.delete('lumen-search'); }, 2600);
+    } catch {}
+  }
+}
+
+function jumpToSearchHit(state, chapterIndex, query, occurrence) {
+  if (chapterIndex !== state.chapterIndex) renderChapter(state, chapterIndex, { ratio: 0, keepDock: true });
+  setTimeout(() => scrollToSearchHit(state, query, occurrence), 90);
+}
+
+function openBookSearch(state) {
+  const body = document.createElement('div');
+  body.innerHTML = `
+    <form class="book-search-form" autocomplete="off">
+      <input class="input" id="bookSearchInput" placeholder="Search this book" spellcheck="false" aria-label="Search this book">
+      <button class="btn btn-sm btn-primary" type="submit">Find</button>
+    </form>
+    <div class="book-search-meta" id="bookSearchMeta">Type at least two letters.</div>
+    <div class="book-search-results" id="bookSearchResults"></div>`;
+  const m = modal({ eyebrow: 'Search', title: 'Search in book', body, wide: true });
+  const input = body.querySelector('#bookSearchInput');
+  const meta = body.querySelector('#bookSearchMeta');
+  const list = body.querySelector('#bookSearchResults');
+  let found = [];
+
+  const render = () => {
+    const query = input.value.trim();
+    if (query.length < 2) {
+      found = [];
+      meta.textContent = 'Type at least two letters.';
+      list.innerHTML = '';
+      return;
+    }
+    found = searchBookText(state, query);
+    meta.textContent = found.length
+      ? `${found.length}${found.length >= 80 ? '+' : ''} match${found.length === 1 ? '' : 'es'}`
+      : `No matches for “${query}”.`;
+    list.innerHTML = found.map(r => `
+      <button class="search-result" data-search-chapter="${r.chapterIndex}" data-search-occurrence="${r.occurrence}">
+        <span class="sr-chapter">${esc(r.chapterLabel)}</span>
+        <span class="sr-snippet">${r.snippet}</span>
+      </button>`).join('');
+  };
+
+  const run = debounce(render, 160);
+  input.addEventListener('input', run);
+  body.querySelector('.book-search-form').addEventListener('submit', event => {
+    event.preventDefault();
+    render();
+  });
+  list.addEventListener('click', event => {
+    const btn = event.target.closest('[data-search-chapter]');
+    if (!btn) return;
+    const query = input.value.trim();
+    m.close();
+    jumpToSearchHit(state, Number(btn.dataset.searchChapter), query, Number(btn.dataset.searchOccurrence));
+  });
+  setTimeout(() => input.focus(), 60);
+}
+
 function openSleepDialog(state) {
   const active = getSleepTimer();
   const body = document.createElement('div');
@@ -2045,6 +2168,7 @@ function openMoreMenu(state) {
   const rect = refs.moreBtn.getBoundingClientRect();
   contextMenu(rect.right - 8, rect.bottom + 8, [
     { label: 'Go to page…', icon: 'list', onSelect: () => openGoTo(state) },
+    ...(state.mode === 'reflow' ? [{ label: 'Search in book…', icon: 'search', onSelect: () => openBookSearch(state) }] : []),
     {
       label: getSleepTimer() ? `Sleep timer · ${formatSleepRemaining(getSleepTimer().remainingMs)}` : 'Sleep timer…',
       icon: 'moon',
@@ -2124,6 +2248,11 @@ function handleStageClick(state, e) {
 function handleKey(state, e) {
   if (state.destroyed || isModalOpen()) return;
   if (isEditable(e.target)) return;
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && state.mode === 'reflow') {
+    e.preventDefault();
+    openBookSearch(state);
+    return;
+  }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
 
   const drawer = refs.tocDrawer.classList.contains('is-open');

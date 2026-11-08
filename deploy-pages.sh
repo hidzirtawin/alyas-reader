@@ -25,6 +25,9 @@ html = re.sub(r'(<meta name="app-build" content=")[^"]*(")', rf'\g<1>{build}\g<2
 html = re.sub(r'\?v=[^"\']*', f'?v={build}', html)
 index.write_text(html)
 (tmp / 'version.json').write_text(json.dumps({'build': build, 'name': "Alya's Reader"}) + '\n')
+sw = tmp / 'sw.js'
+if sw.exists():
+    sw.write_text(sw.read_text().replace('__BUILD__', build))
 print(f'build {build}')
 PY
 

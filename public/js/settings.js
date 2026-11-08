@@ -10,6 +10,7 @@ import {
   previewSpeech, stopPreview, describeVoice,
   getPiperVoices, loadPiperCatalog, piperVoiceById, piperSpeakerName,
   PIPER_PRESETS, onPiperProgress, piperProgressLabel,
+  listCachedVoices, deleteCachedVoice, clearCachedVoices,
 } from './tts.js';
 import {
   modal, toast, confirmDialog,
@@ -198,7 +199,14 @@ export function renderSettings(app) {
               ${icon('shield')}
               <span>Files are saved in this browser’s local database. They are never uploaded to Alya’s Reader or anyone else.</span>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <div class="set-row" style="margin-top:12px">
+              <div>
+                <div class="set-label">Downloaded voices</div>
+                <div class="set-sub" id="voiceStoreSub">Checking…</div>
+              </div>
+              <button class="btn btn-sm" id="manageVoices">Manage</button>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
               <button class="btn btn-sm" id="exportData">${icon('download')} Export notes &amp; data</button>
             </div>
             <div class="divider"></div>
@@ -226,6 +234,68 @@ export function renderSettings(app) {
   view.onclick = e => onSettingsClick(app, e);
   view.oninput = e => onSettingsInput(app, e);
   view.onchange = e => onSettingsChange(app, e);
+  refreshVoiceStore();
+}
+
+function refreshVoiceStore() {
+  const sub = $('#voiceStoreSub');
+  if (!sub) return;
+  listCachedVoices().then(list => {
+    if (!sub.isConnected) return;
+    const bytes = list.reduce((sum, v) => sum + v.size, 0);
+    sub.textContent = list.length
+      ? `${list.length} model${list.length === 1 ? '' : 's'} · ${formatBytes(bytes)}`
+      : 'None downloaded yet';
+  }).catch(() => { sub.textContent = 'Could not read voice storage'; });
+}
+
+async function openVoiceManager(app) {
+  const body = document.createElement('div');
+  body.innerHTML = '<div class="voice-none">Reading downloaded voices…</div>';
+  const foot = document.createElement('div');
+  const m = modal({
+    eyebrow: 'Storage',
+    title: 'Downloaded voices',
+    body,
+    foot,
+    onClose: () => renderSettings(app),
+  });
+
+  const render = async () => {
+    const list = await listCachedVoices();
+    if (!list.length) {
+      body.innerHTML = '<div class="voice-none">No voice models are stored yet. A model downloads the first time you use that voice.</div>';
+      foot.innerHTML = '';
+      return;
+    }
+    const bytes = list.reduce((sum, v) => sum + v.size, 0);
+    body.innerHTML = `<p class="hint" style="margin-bottom:10px">${list.length} model${list.length === 1 ? '' : 's'} · ${formatBytes(bytes)}. Removing one frees space; it downloads again if you use it.</p>
+      <div class="voice-list">${list.map(v => `
+        <div class="voice-opt" style="cursor:default">
+          <span class="vname">${esc(v.name)}</span>
+          <span class="vlang">${esc(v.lang || v.country || 'Voice')} · ${formatBytes(v.size)}</span>
+          <button class="icon-btn" data-delete-voice="${esc(v.key)}" aria-label="Remove ${esc(v.name)}" title="Remove download">${icon('trash')}</button>
+        </div>`).join('')}</div>`;
+    body.querySelectorAll('[data-delete-voice]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await deleteCachedVoice(btn.dataset.deleteVoice);
+        render();
+      });
+    });
+    foot.innerHTML = `<button class="btn btn-sm btn-danger" data-clear-voices>${icon('trash')} Clear all voice downloads</button>`;
+    foot.querySelector('[data-clear-voices]')?.addEventListener('click', async () => {
+      const ok = await confirmDialog({
+        title: 'Clear all voice downloads?',
+        message: 'Frees the space used by voice models. Voices download again the next time you use them.',
+        confirmLabel: 'Clear downloads',
+      });
+      if (!ok) return;
+      await clearCachedVoices();
+      render();
+    });
+  };
+  render();
+  return m;
 }
 
 function fontName(id) {
@@ -270,6 +340,7 @@ function onSettingsClick(app, e) {
     return;
   }
   if (e.target.closest('#showShortcuts')) { app.showShortcuts?.(); return; }
+  if (e.target.closest('#manageVoices')) { openVoiceManager(app); return; }
   if (e.target.closest('#exportData')) { exportData(app); return; }
   if (e.target.closest('#clearLibrary')) {
     confirmDialog({

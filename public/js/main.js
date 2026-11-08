@@ -329,6 +329,18 @@ window.addEventListener('lumen:sleepend', () => {
   else toast('Sleep timer ended', 'info');
 });
 
+/* ── Offline shell ───────────────────────────────────────────────── */
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)
+  && !['localhost', '127.0.0.1'].includes(location.hostname)) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(new URL('../sw.js', import.meta.url), {
+      scope: new URL('../', import.meta.url),
+    }).catch(err => console.warn('Offline cache is unavailable', err));
+  });
+}
+window.addEventListener('offline', () => toast('Offline — using your downloaded library and voices.', 'info'));
+window.addEventListener('online', () => toast('Back online', 'ok'));
+
 /* ── Boot ────────────────────────────────────────────────────────── */
 async function boot() {
   applyPrefs();

@@ -32,6 +32,9 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 - **Languages** — books are detected automatically (script and stop-word analysis, plus EPUB/ODT/FB2 metadata). Non-English books use a matching Piper voice when one is available, and hyphenation follows the book’s language.
 - **Dictionary** — select a word and tap **Define**, or double-click it. A public-domain Webster’s 1913 dictionary is stored offline; other languages also get a Wiktionary link.
 - **Move around** — previous/next chapter buttons sit in the reader footer, the chapter label opens contents, and a chapter dropdown jumps straight to any section. Press `G` for PDF/comic page jumps or a chapter-and-position jump.
+- **Search inside a book** — `⌘F` / `Ctrl+F` or More → Search in book. Results show chapter and context; choosing one jumps there and highlights the match.
+- **Offline & installable** — a service worker caches the app shell after the first visit, so the reader opens without a network connection and can be installed to the home screen.
+- **Voice storage manager** — see how much space downloaded voice models use, remove individual voices, or clear them all from Settings → Data.
 - **Make it yours** — 13 typefaces in a dropdown (Literata, Merriweather, Lora, EB Garamond, Libre Baskerville, Source Serif 4, Georgia, Palatino, Atkinson, Lexend, Inter, OpenDyslexic and System), four themes (Paper, Sepia, Night, Black), text size, line height, measure, paragraph and letter/word spacing, justification and hyphenation.
 - **Dyslexia-friendly mode** — one tap sets OpenDyslexic, larger text, roomy lines, wider letter/word spacing and left-aligned text.
 - **Sleep timer** — choose 5 to 90 minutes in Settings or the reader menu; narration stops and the screen dims when it ends.
@@ -68,6 +71,12 @@ The Australian voice is a community LibriVox model by DataCraftsmanAustralia, li
 Pick **Silent** in the voice picker, or turn off **Read aloud** in Settings. No speech engine is invoked; the Listen button and narration dock are hidden. Bookmarks, highlights, notes and progress are unaffected.
 
 Comic books are always silent because their pages are images; the Listen control is hidden automatically.
+
+## Offline & installing
+
+After the first visit the app shell, fonts and scripts are cached by a service worker, so Alya’s Reader opens without a network connection. Books, bookmarks, the dictionary and downloaded voices were already stored locally. If you add it to your home screen or install it from the browser menu, it opens like an app.
+
+The browser still needs the network once to download a new voice or the first dictionary lookup.
 
 ## Free book sources
 

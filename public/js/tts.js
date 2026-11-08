@@ -324,6 +324,53 @@ async function putCachedVoice(id, config, blob) {
   } catch {}
 }
 
+export async function listCachedVoices() {
+  await loadPiperCatalog();
+  const db = await piperDb();
+  if (!db) return [];
+  const records = await new Promise(resolve => {
+    try {
+      const req = db.transaction('voices').objectStore('voices').getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    } catch { resolve([]); }
+  });
+  const voices = getPiperVoices();
+  return records.map(rec => {
+    const voice = voices.find(v => v.modelUrl === rec.id);
+    return {
+      key: rec.id,
+      name: voice?.name || 'Voice',
+      lang: voice?.language || '',
+      country: voice?.country || '',
+      size: rec.blob?.size || 0,
+      savedAt: rec.savedAt || 0,
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
+}
+
+export async function deleteCachedVoice(key) {
+  const db = await piperDb();
+  if (!db) return;
+  await new Promise(resolve => {
+    const tx = db.transaction('voices', 'readwrite');
+    tx.objectStore('voices').delete(key);
+    tx.oncomplete = resolve;
+    tx.onerror = resolve;
+  });
+}
+
+export async function clearCachedVoices() {
+  const db = await piperDb();
+  if (!db) return;
+  await new Promise(resolve => {
+    const tx = db.transaction('voices', 'readwrite');
+    tx.objectStore('voices').clear();
+    tx.oncomplete = resolve;
+    tx.onerror = resolve;
+  });
+}
+
 async function fetchModelWithProgress(url, expectedBytes, onProgress) {
   const res = await fetch(url, { cache: 'force-cache' });
   if (!res.ok) throw new Error('The Piper voice model could not be downloaded. Check your connection and try again.');

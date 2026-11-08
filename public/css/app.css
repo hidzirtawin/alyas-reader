@@ -1270,32 +1270,6 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
 .voice-pill .vp-track { height: 3px; border-radius: 999px; overflow: hidden; background: var(--surface-3); }
 .voice-pill .vp-track i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: inherit; transition: width .2s; }
 
-.download-prompt {
-  position: fixed; z-index: 215; left: 50%; bottom: 26px;
-  transform: translateX(-50%);
-  width: min(94vw, 480px);
-  display: flex; align-items: center; gap: 11px;
-  padding: 12px 12px 12px 13px;
-  border-radius: 16px;
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  box-shadow: 0 24px 50px -22px rgba(20, 14, 6, .5);
-  animation: toast-in .28s var(--ease) both;
-}
-.download-prompt .dp-icon {
-  width: 34px; height: 34px; flex: none; border-radius: 50%;
-  display: grid; place-items: center;
-  color: var(--accent); background: var(--accent-soft);
-}
-.download-prompt .dp-icon svg { width: 17px; height: 17px; }
-.dp-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.dp-copy strong { font-size: 12px; font-weight: 600; line-height: 1.35; }
-.dp-copy span { font-size: 10.5px; color: var(--ink-2); line-height: 1.4; }
-.download-prompt .icon-btn { flex: none; color: var(--ink-3); width: 30px; height: 30px; }
-@media (max-width: 620px) {
-  .download-prompt { bottom: 14px; border-radius: 14px; }
-  .dp-copy span { display: none; }
-}
 .sources-note {
   margin-top: 20px; padding: 11px 13px; border-radius: 11px;
   background: var(--surface-2); font-size: 11px; line-height: 1.6; color: var(--ink-2);

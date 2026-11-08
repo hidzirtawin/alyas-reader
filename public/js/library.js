@@ -4,7 +4,6 @@ import { db } from './db.js';
 import { detectFormat, unsupportedMessage, probeFile } from './renderers.js';
 import { getPrefs, savePrefs } from './prefs.js';
 import { openBookDetails } from './details.js';
-import { clearPendingDownload } from './sources.js';
 import {
   toast, contextMenu, confirmDialog, coverBox, coverHTML, formatLabel,
 } from './ui.js';
@@ -372,7 +371,6 @@ export async function importFiles(app, fileList) {
       // Metadata and file commit together, so a failed write can't leave a ghost book.
       await db.addBookWithFile(record, file);
       known.add(`${file.name}|${file.size}`);
-      clearPendingDownload();
       added++;
       job.status = 'done';
       job.message = 'Added to library';

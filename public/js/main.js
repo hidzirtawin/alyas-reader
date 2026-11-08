@@ -7,7 +7,7 @@ import { renderMarks } from './bookmarks.js';
 import { renderSettings } from './settings.js';
 import { openReader, closeReader } from './reader.js';
 import { shortcutsModal, toast } from './ui.js';
-import { openBookSources, maybeOfferDownloadedBook } from './sources.js';
+import { openBookSources } from './sources.js';
 import { startSleepTimer, cancelSleepTimer, getSleepTimer, formatSleepRemaining } from './sleep.js';
 import { loadPiperCatalog, preloadPiperVoice, onPiperProgress, piperProgressLabel } from './tts.js';
 import { $, $$, clamp, formatBytes, debounce, icon } from './util.js';
@@ -254,13 +254,9 @@ function checkForUpdateSoon() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     checkForUpdateSoon();
-    maybeOfferDownloadedBook();
   }
 });
-window.addEventListener('focus', () => {
-  checkForUpdateSoon();
-  maybeOfferDownloadedBook();
-});
+window.addEventListener('focus', checkForUpdateSoon);
 
 /* ── Default voice warm-up ───────────────────────────────────────── */
 let voicePill = null;
@@ -344,6 +340,7 @@ window.addEventListener('online', () => toast('Back online', 'ok'));
 /* ── Boot ────────────────────────────────────────────────────────── */
 async function boot() {
   applyPrefs();
+  try { localStorage.removeItem('alya.pendingDownload'); } catch {}
   await loadPiperCatalog().catch(() => {});
   app.refreshRail();
   $('#view').innerHTML = `<div class="pdf-loading" style="min-height:44vh;color:var(--ink-3)">
@@ -355,7 +352,6 @@ async function boot() {
     await app.reload({ render: false });
     app.go('library');
     navigator.storage?.persist?.().catch?.(() => {});
-    setTimeout(() => maybeOfferDownloadedBook(), 1200);
     warmDefaultVoice();
   } catch (err) {
     console.error(err);

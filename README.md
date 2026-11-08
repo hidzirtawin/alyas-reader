@@ -87,8 +87,7 @@ The browser still needs the network once to download a new voice or the first di
 - audiobooks and catalogues such as LibriVox, Audible, Goodreads, BookBub and Google Books
 - library borrowing through Libby and OverDrive with a library card
 
-Every link opens in a new tab. Browsers cannot see files downloaded by another tab, so when you return,
-Alya's Reader offers to add the file you just downloaded — choose it once and it joins your library.
+Every link opens in a new tab. Use **Add a downloaded book** in that window to bring the file into your library.
 Piracy mirrors (LibGen, Z-Library, Anna's Archive, PDF Drive and similar) are deliberately not linked.
 
 ## Keyboard shortcuts

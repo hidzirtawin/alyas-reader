@@ -163,71 +163,13 @@ const GROUPS = [
   },
 ];
 
-const PENDING_KEY = 'alya.pendingDownload';
-
-export function rememberDownloadSource(source) {
-  try {
-    localStorage.setItem(PENDING_KEY, JSON.stringify({ source, at: Date.now() }));
-  } catch {}
-}
-
-function readPending() {
-  try {
-    const rec = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null');
-    return rec && rec.at ? rec : null;
-  } catch { return null; }
-}
-
-export function clearPendingDownload() {
-  try { localStorage.removeItem(PENDING_KEY); } catch {}
-  document.getElementById('downloadPrompt')?.remove();
-}
-
-function showDownloadPrompt(pending) {
-  if (document.getElementById('downloadPrompt')) return;
-  const node = document.createElement('div');
-  node.id = 'downloadPrompt';
-  node.className = 'download-prompt';
-  node.innerHTML = `
-    <div class="dp-icon">${icon('book')}</div>
-    <div class="dp-copy">
-      <strong>Got a book from ${esc(pending.source || 'a free library')}?</strong>
-      <span>Choose the downloaded file and it joins your library.</span>
-    </div>
-    <button class="btn btn-sm btn-primary" data-dp-add>Add book</button>
-    <button class="icon-btn" data-dp-dismiss aria-label="Not now">${icon('x')}</button>`;
-  node.querySelector('[data-dp-add]').addEventListener('click', () => {
-    clearPendingDownload();
-    document.querySelector('#fileInput')?.click();
-  });
-  node.querySelector('[data-dp-dismiss]').addEventListener('click', clearPendingDownload);
-  document.body.appendChild(node);
-}
-
-/* Browsers cannot see files downloaded by another tab, so when the reader
-   returns to the app we offer the file picker instead of guessing. */
-export function maybeOfferDownloadedBook() {
-  if (document.getElementById('downloadPrompt')) return;
-  if (document.querySelector('.modal-backdrop')) return;
-  if (document.querySelector('#reader.is-open')) return;
-  const pending = readPending();
-  if (!pending) return;
-  const age = Date.now() - pending.at;
-  if (age < 2500) return;
-  if (age > 12 * 60 * 60 * 1000) { clearPendingDownload(); return; }
-  setTimeout(() => {
-    if (!readPending() || document.querySelector('.modal-backdrop') || document.querySelector('#reader.is-open')) return;
-    showDownloadPrompt(pending);
-  }, 600);
-}
-
 export function openBookSources() {
   const body = document.createElement('div');
   body.className = 'sources';
   body.innerHTML = `
     <p class="sources-intro">
       Free and legal places to find your next book. Each link opens in a new tab.
-      When you come back with a file, Alya’s Reader will offer to add it to your library.
+      Already downloaded a file? Use “Add a downloaded book” below.
     </p>
     ${GROUPS.map(group => `
       <section class="source-group">
@@ -260,11 +202,7 @@ export function openBookSources() {
     </div>`,
     onMount: ({ bodyEl, footEl, close }) => {
       bodyEl.querySelectorAll('.source-card').forEach(card => {
-        card.addEventListener('click', () => {
-          rememberDownloadSource(card.dataset.source || 'a free library');
-          // Keep the picker ready for when they return from the site.
-          close('source');
-        });
+        card.addEventListener('click', () => close('source'));
       });
       footEl?.querySelector('#sourcesAdd')?.addEventListener('click', () => {
         close('add');

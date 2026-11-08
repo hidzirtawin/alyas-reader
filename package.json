@@ -20,7 +20,8 @@
     "cbr",
     "docx",
     "tts",
-    "reader"
+    "reader",
+    "piper"
   ],
   "license": "MIT",
   "homepage": "https://hidzirtawin.github.io/alyas-reader/",

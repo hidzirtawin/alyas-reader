@@ -7,6 +7,7 @@ import { renderMarks } from './bookmarks.js';
 import { renderSettings } from './settings.js';
 import { openReader, closeReader } from './reader.js';
 import { shortcutsModal, toast } from './ui.js';
+import { loadPiperCatalog } from './tts.js';
 import { $, $$, clamp, formatBytes, debounce, icon } from './util.js';
 
 const app = {
@@ -217,6 +218,7 @@ if ('speechSynthesis' in window) {
 /* ── Boot ────────────────────────────────────────────────────────── */
 async function boot() {
   applyPrefs();
+  await loadPiperCatalog().catch(() => {});
   app.refreshRail();
   $('#view').innerHTML = `<div class="pdf-loading" style="min-height:44vh;color:var(--ink-3)">
     <div class="spinner" style="border-color:var(--line);border-top-color:var(--accent)"></div>

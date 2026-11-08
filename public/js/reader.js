@@ -17,7 +17,7 @@ import { openBookDetails } from './details.js';
 import { openVoiceModal } from './settings.js';
 import {
   $, esc, icon, clamp, debounce, uid, normalizedText,
-  detectSentenceSegments, formatTimeLeft, copyText, isEditable, downloadBlob,
+  detectSentenceSegments, formatTimeLeft, copyText, isEditable, downloadBlob, rafThrottle,
 } from './util.js';
 
 let S = null;
@@ -252,7 +252,7 @@ function wireEvents(state) {
   refs.stage.onclick = e => handleStageClick(state, e);
   refs.stage.onpointerup = () => setTimeout(() => showSelection(state), 30);
 
-  const onScroll = () => handleScroll(state);
+  const onScroll = rafThrottle(() => handleScroll(state));
   refs.stage.addEventListener('scroll', onScroll, { passive: true });
   state.cleanup.push(() => refs.stage.removeEventListener('scroll', onScroll));
 
@@ -416,6 +416,7 @@ function renderChapter(state, index, opts = {}) {
   state.chapterIndex = index;
   state.chapter = chapter;
   state.sentences = null;
+  state.wordsBefore = state.book.chapters.slice(0, index).reduce((sum, c) => sum + (c.words || 0), 0);
   state.ratio = 0;
   state.userScrolled = false;
   state.renderToken++;
@@ -658,7 +659,7 @@ function updateReflowProgress(state, { queue = true } = {}) {
   state.ratio = ratio;
   const n = state.book.chapters.length;
   const words = state.chapter?.words || 0;
-  const wordsBefore = state.book.chapters.slice(0, state.chapterIndex).reduce((sum, c) => sum + (c.words || 0), 0);
+  const wordsBefore = state.wordsBefore || 0;
   const done = wordsBefore + words * ratio;
   const totalWords = state.book.words || 0;
   const pct = totalWords > 0
@@ -1220,6 +1221,14 @@ function updateTTSState(state, st) {
   }
   refs.ttsEq.classList.toggle('is-live', st === 'playing');
   if (st === 'playing') refs.ttsEq.classList.add('is-live');
+  if (st === 'loading') {
+    const e = state.engine;
+    refs.ttsPos.textContent = e?.total && (e.index || 0) > 0
+      ? `Preparing ${Math.min(e.index + 1, e.total)} / ${e.total}…`
+      : 'Preparing voice…';
+  } else if (st === 'playing' && state.engine?.total) {
+    refs.ttsPos.textContent = `${Math.min((state.engine.index || 0) + 1, state.engine.total)} / ${state.engine.total}`;
+  }
   if (navigator.mediaSession) {
     try { navigator.mediaSession.playbackState = st === 'playing' ? 'playing' : st === 'paused' ? 'paused' : 'none'; } catch {}
   }

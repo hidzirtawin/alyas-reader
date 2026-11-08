@@ -438,7 +438,7 @@ async function buildEpub(record, blob) {
         img.setAttribute('href', url);
       } else {
         img.setAttribute('src', url);
-        img.setAttribute('loading', 'eager');
+        img.setAttribute('loading', 'lazy');
         img.setAttribute('decoding', 'async');
         img.removeAttribute('srcset');
       }

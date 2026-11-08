@@ -2,7 +2,7 @@
 
 A calm, local-first ebook and comic reader for your own files. Upload **EPUB, PDF, DOCX, TXT, Markdown, CBZ or CBR**, read in the typography you like, and listen with a natural voice — or turn narration off and read in silence.
 
-Everything stays in your browser. No accounts, no cloud library, no uploads.
+Your books stay in your browser. No accounts, no cloud library, no uploads. Voice models download once from the open Piper catalog.
 
 ```
 node server.js        # or: npm start
@@ -13,7 +13,7 @@ Requires Node.js 18 or newer. There are **no npm dependencies** — the browser 
 
 **Live site:** https://hidzirtawin.github.io/alyas-reader/
 
-The hosted build is static. System voices work everywhere, Out Loud can be reached on localhost (Chromium usually allows this), and ElevenLabs can be called directly from the browser. OpenAI is most reliable through the local server: OpenAI’s browser CORS support is inconsistent for error responses. The local server adds a proxy for cloud providers and Out Loud, keeping things local.
+The hosted build is static. **Piper** neural voices run entirely in the browser and work on both the hosted and local versions. A voice model downloads once from Hugging Face, is cached by the browser, and then works offline. No accounts or API keys.
 
 ---
 
@@ -25,7 +25,7 @@ The hosted build is static. System voices work everywhere, Out Loud can be reach
 - **DOCX** — imported with Mammoth, including headings, lists, tables, emphasis and embedded images. Word documents are split into chapters at heading boundaries.
 - **TXT / Markdown** — plain-text chapter detection, plus a safe Markdown renderer for headings, lists, quotes, code, links and emphasis.
 - **Comics (CBZ / CBR)** — page-by-page viewer with natural page ordering, ComicInfo.xml metadata, first-page covers, a page-number grid, jump-to-page, zoom and swipe/keyboard page turns. CBR support uses a bundled WASM build of libarchive (RAR v4 and v5).
-- **Natural narration** — Web Speech API voices (free, on-device), or optional OpenAI / ElevenLabs neural voices with your own API key.
+- **Natural narration** — the full **Piper** catalog: 179 free neural voices across 30+ languages, including American, British, Scottish, Northern/Southern English and Australian accents. Runs locally in the browser, with optional device voices as a fallback.
 - **Silent reading** — switch narration off entirely in Settings or the voice picker. The reader becomes text-only and the Listen controls disappear.
 - **Listen along** — sentence-by-sentence playback with highlighting, auto-scroll, previous/next sentence, speed control, and automatic chapter (or PDF page) advance. Comic pages are images, so narration is unavailable there.
 - **Make it yours** — six typefaces, four themes (Paper, Sepia, Night, Black), text size, line height, measure, paragraph spacing, justification and hyphenation.
@@ -37,36 +37,28 @@ The hosted build is static. System voices work everywhere, Out Loud can be reach
 
 Open **Settings → Voice & narration → Configure**, or the voice button in the reader.
 
+### Piper — free, offline, default
+
+Alya’s Reader runs [Piper](https://github.com/rhasspy/piper) (MIT) entirely in your browser. The full catalog is included:
+
+- **179 voices** across 30+ languages
+- American, British, Scottish, Northern English, Southern English and **Australian** accents
+- Multi-speaker models with a speaker picker
+- Adjustable speed and a **pause-between-sentences** control for natural reading rhythm
+
+The first time you use a voice, its model is downloaded from Hugging Face and stored in the browser. Models range from about 20 MB to 115 MB; after that the voice works offline. No account or API key is involved, and your book text never leaves your device.
+
+The Australian voice is a community LibriVox model by DataCraftsmanAustralia, licensed **CC-BY-4.0**. Its ten speakers are available in the speaker picker.
+
+**Not included:** a Texas-drawl preset and celebrity voice clones. The open Piper catalog does not contain a licensed Texas voice, and unauthorized celebrity impersonations are intentionally excluded. Character voices are original Piper voices.
+
 ### System voices (free)
 
-Alya’s Reader lists the English voices installed on your device. On macOS, more natural voices are available in:
+Alya’s Reader also lists the English voices installed on your device. On macOS, more natural voices are available in:
 
 **System Settings → Accessibility → Spoken Content → System Voice → Manage Voices**
 
-Download any “Enhanced” or “Premium” English voice; it will appear in Alya’s Reader after a reload.
-
-Speed (0.5×–2×), pitch and highlight-while-reading are adjustable.
-
-### Out Loud voices (free, local, recommended)
-
-Alya’s Reader can use [Out Loud](https://github.com/light-cloud-com/out-loud), a free, source-available, offline desktop TTS app built on Kokoro-82M. It exposes a local API on `127.0.0.1:51730`.
-
-1. Install and open Out Loud from its [releases page](https://github.com/light-cloud-com/out-loud/releases/latest).
-2. In Alya’s Reader, open **Voice settings → Out Loud**.
-3. Choose a voice (or enter a blend such as `af_heart*0.6 + am_michael*0.4`) and save.
-
-Voices are generated on your computer and never leave it. The hosted GitHub Pages build can usually reach Out Loud through the browser; if your browser blocks localhost access, use the local version of Alya’s Reader. Out Loud is a separate project licensed **PolyForm Noncommercial 1.0.0**; no Out Loud code is bundled here. For commercial use, check its license.
-
-### Neural voices (optional)
-
-Choose **OpenAI** or **ElevenLabs** in the voice picker and paste an API key.
-
-- OpenAI: `gpt-4o-mini-tts`, `tts-1-hd` or `tts-1`; voices including Alloy, Nova, Onyx and Shimmer; optional narration-style instructions.
-- ElevenLabs: `eleven_multilingual_v2`, `eleven_turbo_v2_5` or `eleven_flash_v2_5`; six voice presets plus a custom voice ID.
-
-The key is stored **only in this browser** (localStorage). When you run the local server it is sent through the app’s `/api/tts` proxy; on the hosted GitHub Pages version the browser calls the provider directly over HTTPS. It is never written to the server, logs or the app’s own storage. Cloud audio is cached in memory for the current session and never saved to disk.
-
-Audio is generated in small sentence chunks, prefetched one ahead, and played through a normal `<audio>` element. ElevenLabs speed is applied client-side because its API does not accept a rate parameter for all models.
+Download any “Enhanced” or “Premium” English voice; it will appear after a reload. Speed, pitch and highlighting are adjustable.
 
 ### No voice at all
 
@@ -93,9 +85,9 @@ Comic books are always silent because their pages are images; the Listen control
 
 - Book files are read locally and stored in **IndexedDB** as blobs. They are never uploaded to a server.
 - Reading positions, bookmarks, highlights and notes are also local.
-- Settings and voice keys use localStorage.
-- The only network request the app can make on your behalf is the optional neural-TTS call to OpenAI or ElevenLabs, via the local server.
-- “Export notes & data” downloads a JSON file with metadata, positions, bookmarks, highlights and settings (API keys are omitted). Book files are not included.
+- Settings use localStorage.
+- When you choose a Piper voice, its model and voice tensor are downloaded once from Hugging Face and cached in your browser. After that, narration is fully offline. Your book text is never sent anywhere.
+- “Export notes & data” downloads a JSON file with metadata, positions, bookmarks, highlights and settings. Book files are not included.
 - “Delete all books & marks” erases the local database; settings remain.
 
 The server binds to `127.0.0.1` by default. To use another port:
@@ -116,7 +108,7 @@ Alya’s Reader has no login, so only do this on a trusted network.
 ## Project layout
 
 ```
-server.js                 zero-dependency static server + TTS proxy
+server.js                 zero-dependency static server
 public/
   index.html              app shell and inline SVG icon set
   css/app.css             themes, library, reader, PDF, responsive UI
@@ -129,14 +121,14 @@ public/
     renderers.js          EPUB / DOCX / TXT / MD parsing
     pdfview.js            PDF.js viewer, text layer, page narration
     comicview.js          paged CBZ/CBR viewer, zoom, page grid
-    tts.js                speech engine + cloud voice client
+    tts.js                speech engine + Piper catalog/voice engine
     db.js                 IndexedDB library and marks
     prefs.js              persisted preferences
     ui.js                 modals, toasts, menus, covers
     details.js            shared book details dialog
     util.js               small helpers
   fonts/                  Literata, Atkinson Hyperlegible, Inter, Fraunces
-  vendor/                 JSZip, Mammoth, PDF.js + standard fonts, libarchive WASM (CBR)
+  vendor/                 JSZip, Mammoth, PDF.js + standard fonts, libarchive WASM (CBR), Piper browser runtime
 ```
 
 ## Notes and limits
@@ -145,6 +137,7 @@ public/
 - **Scanned PDFs** need an OCR text layer for narration and text selection; image-only pages have nothing to read aloud.
 - **Comics are image-based**, so narration is disabled for CBZ/CBR. Password-protected comic archives are not supported yet. CBR relies on libarchive’s RAR support; if a specific RAR variant fails, convert it to CBZ (a ZIP of page images).
 - **Legacy `.doc` / `.rtf` / MOBI / AZW** are not supported. Save as DOCX, EPUB or PDF first.
+- **Piper’s first use** downloads a voice model (about 20–115 MB) and can take a minute; later sentences are prefetched while the current one plays. The model is cached in the browser.
 - **Very large books** (hundreds of MB) may exceed the browser’s storage quota. The library reports storage usage in Settings.
 - Alya’s Reader is a local web app; keep the server running while reading. Nothing is bundled with the project.
 
@@ -154,7 +147,10 @@ public/
 - [Mammoth](https://github.com/mwilliamson/mammoth.js) (BSD-2-Clause) — DOCX conversion
 - [JSZip](https://stuk.github.io/jszip/) (MIT) — EPUB and CBZ container parsing
 - [libarchive.js](https://github.com/nika-begiashvili/libarchivejs) (MIT; WASM port of libarchive) — CBR/RAR extraction
-- [Out Loud](https://github.com/light-cloud-com/out-loud) by Light Cloud Labs (PolyForm Noncommercial 1.0.0) — optional local Kokoro-82M voice engine, used via its HTTP API
+- [Piper](https://github.com/rhasspy/piper) (MIT) — neural text-to-speech engine
+- [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) (MIT) — browser/WASM wrapper and worker runtime
+- [Piper voice models](https://huggingface.co/rhasspy/piper-voices) (MIT) — official voice catalog
+- [Australian LibriVox Piper voice](https://huggingface.co/DataCraftsmanAustralia/piper-en_AU-librivox-medium) by DataCraftsmanAustralia (CC-BY-4.0)
 - Typefaces: Literata, Atkinson Hyperlegible, Inter and Fraunces (SIL Open Font License), served locally from Fontsource builds.
 
 Built for quiet afternoons and long train rides.

@@ -144,7 +144,7 @@ export class PdfView {
       const base = page.getViewport({ scale: 1 });
       const cssScale = this._cssWidth() / base.width;
       const viewport = page.getViewport({ scale: cssScale });
-      const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+      const dpr = Math.min(1.75, Math.max(1, window.devicePixelRatio || 1));
       const renderViewport = page.getViewport({ scale: cssScale * dpr });
 
       st.wrap.style.width = `${Math.round(viewport.width)}px`;
@@ -204,6 +204,7 @@ export class PdfView {
       st.wrap.querySelector('.page-shimmer')?.remove();
 
       if (this._currentHighlight?.page === index) this._drawHighlight(this._currentHighlight);
+      this._recyclePages();
       if (index === 0) this._handleScroll();
     } catch (err) {
       st.rendering = false;
@@ -295,7 +296,30 @@ export class PdfView {
     this.container.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
     this.currentPage = n;
     this.renderPage(n - 1);
+    this._recyclePages();
     this.onPageChange(n);
+  }
+
+  _recyclePages() {
+    if (this.destroyed) return;
+    const current = (this.currentPage || 1) - 1;
+    const radius = 5;
+    for (const st of this.states) {
+      if (!st.rendered || Math.abs(st.index - current) <= radius) continue;
+      st.rendered = false;
+      st.rendering = false;
+      st.canvas?.remove();
+      st.textLayer?.remove();
+      st.hlLayer?.remove();
+      st.canvas = st.textLayer = st.hlLayer = null;
+      st.itemSpans = null;
+      if (!st.wrap.querySelector('.page-shimmer')) {
+        const sh = document.createElement('div');
+        sh.className = 'page-shimmer';
+        sh.textContent = `Page ${st.index + 1}`;
+        st.wrap.appendChild(sh);
+      }
+    }
   }
 
   _handleScroll() {
@@ -309,6 +333,8 @@ export class PdfView {
     }
     if (page !== this.currentPage) {
       this.currentPage = page;
+      for (let i = Math.max(0, page - 3); i <= Math.min(this.numPages - 1, page); i++) this.renderPage(i);
+      this._recyclePages();
       this.onPageChange(page);
     }
   }

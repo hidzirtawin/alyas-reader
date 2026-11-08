@@ -35,21 +35,16 @@ const DEFAULTS = {
   },
   tts: {
     enabled: true,
-    provider: 'system',
+    provider: 'piper',
+    piperVoice: 'en_US-lessac-medium',
+    piperSpeaker: 0,
     voiceURI: '',
     rate: 1,
     pitch: 1,
     volume: 0.9,
     autoAdvance: true,
     highlight: true,
-    openaiKey: '',
-    openaiVoice: 'nova',
-    openaiModel: 'gpt-4o-mini-tts',
-    instructions: 'Warm, clear audiobook narration. Unhurried but engaged.',
-    elevenKey: '',
-    elevenVoice: '21m00Tcm4TlvDq8ikWAM',
-    outloudVoice: 'af_heart',
-    elevenModel: 'eleven_multilingual_v2',
+    sentencePause: 0.2,
   },
 };
 
@@ -67,12 +62,29 @@ function merge(base, extra) {
 }
 
 function load() {
+  let merged;
   try {
-    const raw = JSON.parse(localStorage.getItem(KEY) || '{}');
-    return merge(DEFAULTS, raw);
+    merged = merge(DEFAULTS, JSON.parse(localStorage.getItem(KEY) || '{}'));
   } catch {
-    return merge(DEFAULTS, {});
+    merged = merge(DEFAULTS, {});
   }
+  // Migrate older provider settings (cloud/native) to the free local engine.
+  const old = merged.tts || {};
+  const provider = old.provider === 'system' ? 'system' : 'piper';
+  merged.tts = {
+    enabled: old.enabled !== false,
+    provider,
+    piperVoice: typeof old.piperVoice === 'string' && old.piperVoice ? old.piperVoice : DEFAULTS.tts.piperVoice,
+    piperSpeaker: Number.isFinite(Number(old.piperSpeaker)) ? Number(old.piperSpeaker) : 0,
+    voiceURI: typeof old.voiceURI === 'string' ? old.voiceURI : '',
+    rate: Number.isFinite(Number(old.rate)) ? Number(old.rate) : 1,
+    pitch: Number.isFinite(Number(old.pitch)) ? Number(old.pitch) : 1,
+    volume: Number.isFinite(Number(old.volume)) ? Number(old.volume) : 0.9,
+    autoAdvance: old.autoAdvance !== false,
+    highlight: old.highlight !== false,
+    sentencePause: Number.isFinite(Number(old.sentencePause)) ? Number(old.sentencePause) : 0.2,
+  };
+  return merged;
 }
 
 export const DEFAULT_READER = { ...DEFAULTS.reader };

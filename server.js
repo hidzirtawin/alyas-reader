@@ -1,12 +1,9 @@
 #!/usr/bin/env node
-/* Alya’s Reader — a zero-dependency local server.
-   Serves the app and proxies optional neural-voice requests so browser
-   API keys are never exposed to CORS workarounds or third-party pages. */
+/* Alya’s Reader — a zero-dependency local static server. */
 
 'use strict';
 
 const http = require('http');
-const https = require('https');
 const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
@@ -35,6 +32,8 @@ const MIME = {
   '.ttf': 'font/ttf',
   '.pfb': 'application/octet-stream',
   '.wasm': 'application/wasm',
+  '.bin': 'application/octet-stream',
+  '.data': 'application/octet-stream',
   '.txt': 'text/plain; charset=utf-8',
 };
 
@@ -45,21 +44,21 @@ const SECURITY_HEADERS = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
   'Content-Security-Policy': [
     "default-src 'self'",
+    // Piper / ONNX Runtime use WebAssembly; assets are served locally.
     "script-src 'self' 'wasm-unsafe-eval'",
     "worker-src 'self' blob:",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self'",
     "media-src 'self' blob:",
-    "connect-src 'self' https://api.openai.com https://api.elevenlabs.io http://127.0.0.1:51730 http://localhost:51730",
+    // Voice models and voice tensors are fetched once from Hugging Face.
+    "connect-src 'self' blob: data: https://huggingface.co https://*.huggingface.co https://*.hf.co",
     "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",
   ].join('; '),
 };
-
-/* ── Static files ─────────────────────────────────────────────────── */
 
 function safePath(urlPath) {
   let decoded;
@@ -68,6 +67,15 @@ function safePath(urlPath) {
   const resolved = path.normalize(path.join(PUBLIC_DIR, decoded));
   if (resolved !== PUBLIC_DIR && !resolved.startsWith(PUBLIC_DIR + path.sep)) return null;
   return resolved;
+}
+
+function send(res, status, text) {
+  res.writeHead(status, {
+    ...SECURITY_HEADERS,
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  res.end(text);
 }
 
 async function serveStatic(req, res, urlPath) {
@@ -87,6 +95,7 @@ async function serveStatic(req, res, urlPath) {
   if (!stat.isFile()) return send(res, 404, 'Not found');
 
   const ext = path.extname(filePath).toLowerCase();
+  // Voice models / runtime assets never change under their versioned folder.
   const immutable = urlPath.startsWith('/vendor/') || urlPath.startsWith('/fonts/');
   const headers = {
     ...SECURITY_HEADERS,
@@ -103,274 +112,6 @@ async function serveStatic(req, res, urlPath) {
   fs.createReadStream(filePath).on('error', () => res.destroy()).pipe(res);
 }
 
-function send(res, status, text, extra = {}) {
-  res.writeHead(status, {
-    ...SECURITY_HEADERS,
-    'Content-Type': 'text/plain; charset=utf-8',
-    'Cache-Control': 'no-store',
-    ...extra,
-  });
-  res.end(text);
-}
-
-function sendJSON(res, status, payload) {
-  const body = JSON.stringify(payload);
-  res.writeHead(status, {
-    ...SECURITY_HEADERS,
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store',
-    'Content-Length': Buffer.byteLength(body),
-  });
-  res.end(body);
-}
-
-/* ── Request helpers ──────────────────────────────────────────────── */
-
-function readBody(req, limit = 600 * 1024) {
-  return new Promise((resolve, reject) => {
-    let size = 0;
-    const chunks = [];
-    req.on('data', chunk => {
-      size += chunk.length;
-      if (size > limit) {
-        const err = new Error('Request body is too large.');
-        err.status = 413;
-        reject(err);
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
-      if (!raw) return resolve({});
-      try { resolve(JSON.parse(raw)); }
-      catch { const e = new Error('Invalid JSON body.'); e.status = 400; reject(e); }
-    });
-    req.on('error', reject);
-  });
-}
-
-function httpsRequest({ hostname, path: reqPath, method = 'POST', headers, body, timeout = 65000 }) {
-  return new Promise((resolve, reject) => {
-    const req = https.request({ hostname, path: reqPath, method, headers }, resolve);
-    req.setTimeout(timeout, () => req.destroy(new Error('The voice service took too long to respond.')));
-    req.on('error', reject);
-    if (body) req.write(body);
-    req.end();
-  });
-}
-
-function localRequest({ hostname = '127.0.0.1', port = 51730, path: reqPath, method = 'GET', headers, body, timeout = 45000 }) {
-  return new Promise((resolve, reject) => {
-    const req = http.request({ hostname, port, path: reqPath, method, headers }, resolve);
-    req.setTimeout(timeout, () => req.destroy(new Error('Out Loud took too long to respond.')));
-    req.on('error', reject);
-    if (body) req.write(body);
-    req.end();
-  });
-}
-
-function collect(stream, limit = 16 * 1024) {
-  return new Promise(resolve => {
-    let text = '';
-    let size = 0;
-    stream.on('data', chunk => {
-      size += chunk.length;
-      if (size <= limit) text += chunk.toString('utf8');
-    });
-    stream.on('end', () => resolve(text));
-    stream.on('error', () => resolve(text));
-  });
-}
-
-function clampNumber(value, min, max, fallback) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(max, Math.max(min, n));
-}
-
-function cleanText(value, limit) {
-  return String(value || '').replace(/\0/g, '').replace(/\s+/g, ' ').trim().slice(0, limit);
-}
-
-/* ── Neural voice proxy ──────────────────────────────────────────── */
-
-const OPENAI_VOICES = new Set(['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse']);
-const OPENAI_MODELS = new Set(['gpt-4o-mini-tts', 'tts-1-hd', 'tts-1']);
-const ELEVEN_MODELS = new Set(['eleven_multilingual_v2', 'eleven_turbo_v2_5', 'eleven_flash_v2_5', 'eleven_v3']);
-
-async function handleTTS(req, res) {
-  if (req.method !== 'POST') return sendJSON(res, 405, { error: 'Use POST.' });
-
-  const origin = req.headers.origin;
-  if (origin) {
-    const host = req.headers.host || '';
-    const allowed = new Set([`http://${host}`, `https://${host}`]);
-    if (!allowed.has(origin)) return sendJSON(res, 403, { error: 'Cross-origin requests are not allowed.' });
-  }
-
-  let payload;
-  try { payload = await readBody(req); }
-  catch (err) { return sendJSON(res, err.status || 400, { error: err.message }); }
-
-  const provider = String(payload.provider || '').toLowerCase();
-  const key = String(payload.key || '').trim();
-  const text = cleanText(payload.text, provider === 'elevenlabs' ? 5000 : 4000);
-  const speed = clampNumber(payload.speed, 0.25, 4, 1);
-  const isOutLoud = provider === 'outloud';
-
-  if (!isOutLoud && (!key || key.length < 12 || key.length > 300 || /[\s]/.test(key))) {
-    return sendJSON(res, 400, { error: 'Add a valid API key in Voice settings.' });
-  }
-  if (!text) return sendJSON(res, 400, { error: 'There is no text to read.' });
-
-  try {
-    if (provider === 'outloud') {
-      const voice = String(payload.voice || 'af_heart').trim();
-      if (!/^[A-Za-z0-9_*+.\- ]{1,200}$/.test(voice)) {
-        return sendJSON(res, 400, { error: 'Choose a valid Out Loud voice.' });
-      }
-      const body = JSON.stringify({
-        voice,
-        input: text,
-        speed: clampNumber(payload.speed, 0.5, 2, 1),
-        response_format: 'mp3',
-      });
-      let upstream;
-      try {
-        upstream = await localRequest({
-          path: '/api/v1/audio/speech',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(body),
-            'Accept': 'audio/mpeg',
-          },
-          body,
-          timeout: 90000,
-        });
-      } catch {
-        return sendJSON(res, 503, { error: 'Out Loud isn’t running. Open the Out Loud app, then try again.' });
-      }
-      return pipeAudio(upstream, res, 'Out Loud');
-    }
-
-    if (provider === 'openai') {
-      const voice = OPENAI_VOICES.has(payload.voice) ? payload.voice : 'nova';
-      const model = OPENAI_MODELS.has(payload.model) ? payload.model : 'gpt-4o-mini-tts';
-      const body = {
-        model,
-        voice,
-        input: text,
-        speed,
-        response_format: 'mp3',
-      };
-      if (model === 'gpt-4o-mini-tts' && payload.instructions) {
-        body.instructions = cleanText(payload.instructions, 600);
-      }
-      const upstream = await httpsRequest({
-        hostname: 'api.openai.com',
-        path: '/v1/audio/speech',
-        headers: {
-          'Authorization': `Bearer ${key}`,
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(JSON.stringify(body)),
-          'Accept': 'audio/mpeg',
-        },
-        body: JSON.stringify(body),
-      });
-      return pipeAudio(upstream, res, 'OpenAI');
-    }
-
-    if (provider === 'elevenlabs') {
-      const voiceId = /^[A-Za-z0-9_-]{8,64}$/.test(String(payload.voice || '')) ? String(payload.voice) : '';
-      if (!voiceId) return sendJSON(res, 400, { error: 'Choose a valid ElevenLabs voice.' });
-      const model = ELEVEN_MODELS.has(payload.model) ? payload.model : 'eleven_multilingual_v2';
-      const body = {
-        text,
-        model_id: model,
-        voice_settings: {
-          stability: 0.45,
-          similarity_boost: 0.75,
-          style: 0.15,
-          use_speaker_boost: true,
-        },
-      };
-      const upstream = await httpsRequest({
-        hostname: 'api.elevenlabs.io',
-        path: `/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
-        headers: {
-          'xi-api-key': key,
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(JSON.stringify(body)),
-          'Accept': 'audio/mpeg',
-        },
-        body: JSON.stringify(body),
-      });
-      return pipeAudio(upstream, res, 'ElevenLabs');
-    }
-
-    return sendJSON(res, 400, { error: 'Choose a voice provider first.' });
-  } catch (err) {
-    console.error('[tts]', provider, err.message);
-    return sendJSON(res, 502, { error: err.message || 'The voice service could not be reached.' });
-  }
-}
-
-async function pipeAudio(upstream, res, label) {
-  const status = upstream.statusCode || 502;
-  if (status < 200 || status >= 300) {
-    const raw = await collect(upstream);
-    let message = `${label} returned an error (${status}).`;
-    try {
-      const data = JSON.parse(raw);
-      const detail = data?.error?.message || data?.detail?.message || data?.detail || data?.message || (typeof data?.error === 'string' ? data.error : null);
-      if (typeof detail === 'string' && detail.trim()) message = detail.trim().slice(0, 400);
-    } catch {
-      if (raw && raw.length < 300 && !raw.includes('<')) message = raw.trim();
-    }
-    if (status === 401 || status === 403) message = `${label}: the API key was rejected. Check it and try again.`;
-    if (status === 429) message = `${label}: rate limit or allowance reached. Try again later.`;
-    return sendJSON(res, 502, { error: message });
-  }
-
-  res.writeHead(200, {
-    ...SECURITY_HEADERS,
-    'Content-Type': upstream.headers['content-type'] || 'audio/mpeg',
-    'Cache-Control': 'no-store',
-  });
-  upstream.pipe(res);
-  upstream.on('error', () => res.destroy());
-  res.on('close', () => { try { upstream.destroy(); } catch {} });
-}
-
-async function handleOutLoudVoices(req, res) {
-  if (req.method !== 'GET') return sendJSON(res, 405, { error: 'Use GET.' });
-  try {
-    const upstream = await localRequest({
-      path: '/api/v1/audio/voices',
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      timeout: 4000,
-    });
-    if ((upstream.statusCode || 500) >= 400) {
-      return sendJSON(res, 503, { error: 'Out Loud is not ready yet.' });
-    }
-    const raw = await collect(upstream, 2 * 1024 * 1024);
-    res.writeHead(200, {
-      ...SECURITY_HEADERS,
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store',
-    });
-    res.end(raw);
-  } catch {
-    return sendJSON(res, 503, { error: 'Out Loud is not running on port 51730. Open the Out Loud app first.' });
-  }
-}
-
-/* ── Server ──────────────────────────────────────────────────────── */
-
 const server = http.createServer((req, res) => {
   let urlPath;
   try {
@@ -379,12 +120,19 @@ const server = http.createServer((req, res) => {
     return send(res, 400, 'Bad request');
   }
 
-  if (urlPath === '/api/health') return sendJSON(res, 200, { ok: true, app: "Alya's Reader" });
-  if (urlPath === '/api/tts') return handleTTS(req, res);
-  if (urlPath === '/api/outloud/voices') return handleOutLoudVoices(req, res);
+  if (urlPath === '/api/health') {
+    const body = JSON.stringify({ ok: true, app: "Alya's Reader" });
+    res.writeHead(200, {
+      ...SECURITY_HEADERS,
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Content-Length': Buffer.byteLength(body),
+    });
+    return res.end(body);
+  }
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
-    return send(res, 405, 'Method not allowed', { Allow: 'GET, HEAD' });
+    return send(res, 405, 'Method not allowed');
   }
   return serveStatic(req, res, urlPath);
 });

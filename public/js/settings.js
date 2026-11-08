@@ -6,8 +6,7 @@ import {
 } from './prefs.js';
 import {
   englishVoices, findVoice, previewSpeech, stopPreview, describeVoice,
-  ELEVEN_PRESETS, fetchOutLoudVoices, cachedOutLoudVoices,
-  OUTLOUD_DEFAULT_VOICE,
+  getPiperVoices, loadPiperCatalog, piperVoiceById, piperSpeakerName,
 } from './tts.js';
 import {
   modal, toast, confirmDialog,
@@ -27,11 +26,7 @@ export function renderSettings(app) {
   const usedPct = storage.quota ? clamp((storage.used / storage.quota) * 100, 0.5, 100) : 0;
   const voiceName = describeVoice();
   const voiceSub = tts.enabled
-    ? (tts.provider === 'system'
-      ? 'Free · reads on this device'
-      : tts.provider === 'outloud'
-        ? 'Kokoro · local · offline'
-        : tts.provider === 'openai' ? 'Neural · OpenAI API key' : 'Neural · ElevenLabs API key')
+    ? (tts.provider === 'system' ? 'Free · your device’s voices' : 'Piper · free · offline neural voice')
     : 'Text only · no narration';
 
   view.innerHTML = `
@@ -82,7 +77,7 @@ export function renderSettings(app) {
 
         <section class="panel set-card">
           <h3>Voice &amp; narration</h3>
-          <p class="set-desc">Listen with a free system voice, a studio voice, or read silently.</p>
+          <p class="set-desc">Listen with a free offline neural voice, your device’s voices, or read silently.</p>
           <div class="set-body">
             <div class="set-row">
               <div>
@@ -102,6 +97,8 @@ export function renderSettings(app) {
             <div id="voiceDetails"${tts.enabled ? '' : ' style="display:none"'} >
               <div class="set-row" style="margin-bottom:6px"><span class="set-label">Default speed</span><output id="ttsSpeedOut">${tts.rate.toFixed(2)}×</output></div>
               <input class="range" id="setTtsSpeed" type="range" min="0.5" max="2" step="0.05" value="${tts.rate}" aria-label="Default narration speed">
+              <div class="set-row" style="margin-top:12px;margin-bottom:6px"><span class="set-label">Pause between sentences</span><output id="ttsPauseOut">${tts.sentencePause.toFixed(2)}s</output></div>
+              <input class="range" id="setTtsPause" type="range" min="0" max="1" step="0.05" value="${tts.sentencePause}" aria-label="Pause between sentences">
               <label class="switch" style="margin-top:12px">
                 <input type="checkbox" id="setAutoAdvance" ${tts.autoAdvance ? 'checked' : ''}>
                 <span class="track"></span><span class="switch-label">Continue to the next chapter</span>
@@ -112,7 +109,7 @@ export function renderSettings(app) {
               </label>
               <div style="margin-top:14px"><button class="btn btn-sm" data-preview-voice>${icon('volume')} Hear a sample</button></div>
             </div>
-            <p class="hint">System voices are free and instant. <strong>Out Loud</strong> adds free, offline Kokoro voices when its desktop app is running. OpenAI and ElevenLabs voices need an API key, stored only in this browser.</p>
+            <p class="hint"><strong>Piper</strong> voices are free and run entirely in this browser. The first use downloads an open voice model (20–115 MB) from Hugging Face, then works offline. No accounts or API keys. System voices are instant.</p>
           </div>
         </section>
       </div>
@@ -186,7 +183,7 @@ export function renderSettings(app) {
               <button class="btn btn-sm" id="showShortcuts">${icon('keyboard')} View</button>
             </div>
             <div class="divider"></div>
-            <p class="hint" style="line-height:1.65">EPUB rendering, PDF.js, Mammoth and JSZip run entirely on your device. Natural narration uses your operating system’s voices, or an optional neural voice key that never leaves your browser except to reach its provider.</p>
+            <p class="hint" style="line-height:1.65">EPUB rendering, PDF.js, Mammoth and JSZip run entirely on your device. Natural narration uses <strong>Piper</strong> (MIT, from rhasspy/piper) running locally in your browser, or your operating system’s voices. No accounts or API keys.</p>
             <p class="hint">Alya’s Reader · version 1.0</p>
           </div>
         </section>
@@ -282,6 +279,12 @@ function onSettingsInput(app, e) {
     const v = Number(e.target.value);
     savePrefs({ tts: { rate: v } }, { silent: true });
     $('#ttsSpeedOut').textContent = `${v.toFixed(2)}×`;
+    return;
+  }
+  if (id === 'setTtsPause') {
+    const v = Number(e.target.value);
+    savePrefs({ tts: { sentencePause: v } }, { silent: true });
+    $('#ttsPauseOut').textContent = `${v.toFixed(2)}s`;
   }
 }
 
@@ -305,8 +308,6 @@ function exportData(app) {
   try {
     const prefs = getPrefs();
     const safeTts = { ...prefs.tts };
-    delete safeTts.openaiKey;
-    delete safeTts.elevenKey;
     const payload = {
       app: 'Alya’s Reader',
       version: 1,
@@ -332,25 +333,30 @@ function exportData(app) {
    Voice picker
    ═══════════════════════════════════════════════════════════════════ */
 
-export function openVoiceModal({ onSaved } = {}) {
+export async function openVoiceModal({ onSaved } = {}) {
   window.lumen?.pauseTTS?.();
   stopPreview();
+  await loadPiperCatalog().catch(() => {});
 
   const original = getPrefs().tts;
-  const draft = JSON.parse(JSON.stringify(original));
+  const draft = { ...original };
   let tab = draft.enabled ? draft.provider : 'silent';
+  if (!['piper', 'system'].includes(tab)) tab = 'piper';
 
   const body = document.createElement('div');
   body.innerHTML = `
     <div class="provider-tabs" role="tablist" aria-label="Narration mode">
       <button class="provider-tab" data-tab="silent" role="tab">${icon('eye-off')} Silent</button>
       <button class="provider-tab" data-tab="system" role="tab">${icon('volume')} System</button>
-      <button class="provider-tab" data-tab="openai" role="tab">${icon('sparkles')} OpenAI <span class="tag">AI</span></button>
-      <button class="provider-tab" data-tab="elevenlabs" role="tab">${icon('mic')} ElevenLabs <span class="tag">AI</span></button>
-      <button class="provider-tab" data-tab="outloud" role="tab">${icon('headphones')} Out Loud <span class="tag">Local</span></button>
+      <button class="provider-tab" data-tab="piper" role="tab">${icon('headphones')} Piper <span class="tag">Free</span></button>
     </div>
     <div id="voiceTabBody"></div>
     <div class="divider" style="margin:18px 0 14px"></div>
+    <div class="slider-line" style="margin-bottom:10px">
+      <span style="font-size:11px;width:128px;color:var(--ink-3)">Pause between sentences</span>
+      <input class="range" id="vmPause" type="range" min="0" max="1" step="0.05" value="${draft.sentencePause ?? 0.2}">
+      <output id="vmPauseOut">${(draft.sentencePause ?? 0.2).toFixed(2)}s</output>
+    </div>
     <div style="display:flex;flex-direction:column;gap:11px">
       <label class="switch">
         <input type="checkbox" id="vmAutoAdvance" ${draft.autoAdvance ? 'checked' : ''}>
@@ -361,19 +367,17 @@ export function openVoiceModal({ onSaved } = {}) {
         <span class="track"></span><span class="switch-label">Highlight the sentence being read</span>
       </label>
     </div>
-    <div class="callout" style="margin-top:16px">${icon('shield')}<span>Voice keys are stored only in this browser. Locally they pass through this app’s own proxy; on a hosted site they go directly to the provider over HTTPS. Out Loud voices never leave your computer. Out Loud is a separate, source-available app licensed for non-commercial use.</span></div>
+    <div class="callout" style="margin-top:16px">${icon('shield')}<span>Piper runs entirely in this browser. Voice models download once and are cached in your browser; your book text never leaves this device. Voices are original character voices, not celebrity impersonations. A licensed Texas-drawl preset isn’t available in the open voice set.</span></div>
   `;
 
   const foot = document.createElement('div');
   foot.style.cssText = 'display:flex;gap:9px;width:100%;justify-content:flex-end';
-  foot.innerHTML = `
-    <button class="btn" data-cancel>Cancel</button>
-    <button class="btn btn-primary" data-save>Save voice</button>`;
+  foot.innerHTML = `<button class="btn" data-cancel>Cancel</button><button class="btn btn-primary" data-save>Save voice</button>`;
 
   const m = modal({
     eyebrow: 'Narration',
-    title: 'Choose how Alya’s Reader reads',
-    subtitle: 'A free voice on this device, a neural voice from the cloud, or no voice at all.',
+    title: 'Choose how Alya’s Reader speaks',
+    subtitle: 'Free, offline neural voices from Piper — or your device’s own voices.',
     body,
     foot,
     wide: true,
@@ -389,71 +393,32 @@ export function openVoiceModal({ onSaved } = {}) {
   function renderTabs() {
     tabs.forEach(t => t.classList.toggle('is-active', t.dataset.tab === tab));
     tabBody.innerHTML = tabMarkup(tab);
-    syncTabLabels();
     const previewBtn = tabBody.querySelector('[data-preview]');
     previewBtn?.addEventListener('click', () => testVoice(previewBtn));
-    if (tab === 'outloud') hydrateOutLoud();
-  }
-
-  async function hydrateOutLoud(force = false) {
-    const status = tabBody.querySelector('#outloudStatus');
-    const list = tabBody.querySelector('#outloudVoices');
-    if (!status || !list) return;
-    const cached = force ? null : cachedOutLoudVoices();
-    if (cached?.length) renderOutLoudList(cached, status, list, true);
-    try {
-      const voices = await fetchOutLoudVoices({ force: force || !cached?.length });
-      if (tab !== 'outloud') return;
-      renderOutLoudList(voices, status, list, true);
-    } catch {
-      if (tab !== 'outloud') return;
-      status.innerHTML = `${icon('info')}<span>Out Loud not detected</span><button class="outloud-refresh" type="button" data-outloud-refresh>Check again</button>`;
-      status.classList.add('is-off');
-      list.innerHTML = `<div class="voice-none">Start the <a href="https://github.com/light-cloud-com/out-loud/releases/latest" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Out Loud</a> desktop app, then choose “Check again”. If your browser blocks localhost access on the hosted site, use the local version.</div>`;
+    if (tab === 'system' && !draft.voiceURI) {
+      draft.voiceURI = englishVoices()[0]?.voiceURI || '';
     }
-  }
-
-  function renderOutLoudList(voices, status, list, connected) {
-    if (connected) {
-      status.classList.remove('is-off');
-      status.innerHTML = `${icon('check')}<span>Connected · ${voices.length} ${voices.length === 1 ? 'voice' : 'voices'}</span><button class="outloud-refresh" type="button" data-outloud-refresh>Refresh</button>`;
-    }
-    const active = draft.outloudVoice || OUTLOUD_DEFAULT_VOICE;
-    list.innerHTML = `<div class="voice-list">${voices.map(v => `
-      <button class="voice-opt${v.id === active ? ' is-active' : ''}" data-outloud-voice="${esc(v.id)}">
-        <span class="playing-dot"></span>
-        <span class="vname">${esc(v.name || v.id)}</span>
-        <span class="vlang">${esc(v.lang || '')}</span>
-        <span class="vtag">${esc(v.engine || 'kokoro')}</span>
-      </button>`).join('')}</div>`;
-    const input = tabBody.querySelector('#vmOutloudVoice');
-    if (input) input.value = active;
-  }
-
-  function syncTabLabels() {
-    if (tab === 'system') {
-      const v = findVoice(draft.voiceURI) || englishVoices()[0];
-      if (v && !draft.voiceURI) draft.voiceURI = v.voiceURI;
-    }
+    if (tab === 'piper') renderPiperList();
   }
 
   function tabMarkup(which) {
     if (which === 'silent') {
       return `
         <div class="voice-none" style="text-align:left;padding:8px 2px 4px">
-          <div class="callout" style="margin-bottom:14px">${icon('eye-off')}<span><strong>No narration.</strong> The reader becomes a quiet, text-only place. The Listen button and voice dock are hidden. Your saved voice choice is remembered for whenever you turn narration back on.</span></div>
+          <div class="callout" style="margin-bottom:14px">${icon('eye-off')}<span><strong>No narration.</strong> Alya’s Reader becomes a quiet, text-only place. The Listen button and voice dock are hidden. Your saved voice choice is remembered for whenever you turn narration back on.</span></div>
           <div class="feature" style="background:var(--surface-2);border:0">
             <div class="fi">${icon('book')}</div>
             <div><strong>Silent reading</strong><p>Bookmarks, highlights, notes, progress and every appearance control still work exactly the same.</p></div>
           </div>
         </div>`;
     }
+
     if (which === 'system') {
       const voices = englishVoices();
       return `
         <div class="field" style="margin-bottom:14px">
-          <label>System voice <span class="dim" style="font-weight:400">· ${voices.length} English ${voices.length === 1 ? 'voice' : 'voices'} found</span></label>
-          ${voices.length ? `<div class="voice-list" id="vmVoiceList">
+          <label>Device voice <span class="dim" style="font-weight:400">· ${voices.length} English ${voices.length === 1 ? 'voice' : 'voices'} found</span></label>
+          ${voices.length ? `<div class="voice-list">
             ${voices.map(v => {
               const active = v.voiceURI === draft.voiceURI || (!draft.voiceURI && v === voices[0]);
               const enhanced = /natural|premium|enhanced|neural/i.test(v.name);
@@ -466,112 +431,99 @@ export function openVoiceModal({ onSaved } = {}) {
             }).join('')}
           </div>` : `<div class="voice-none">No system voices were found. On macOS, open <strong>System Settings → Accessibility → Spoken Content → System Voice → Manage Voices</strong> and download an English voice, then reload Alya’s Reader.</div>`}
         </div>
-        <div class="slider-line" style="margin-top:4px"><span style="font-size:11px;width:84px;color:var(--ink-3)">Speed</span><input class="range" id="vmRate" type="range" min="0.5" max="2" step="0.05" value="${draft.rate}"><output id="vmRateOut">${draft.rate.toFixed(2)}×</output></div>
+        <div class="slider-line"><span style="font-size:11px;width:84px;color:var(--ink-3)">Speed</span><input class="range" id="vmRate" type="range" min="0.5" max="2" step="0.05" value="${draft.rate}"><output id="vmRateOut">${draft.rate.toFixed(2)}×</output></div>
         <div class="slider-line" style="margin-top:8px"><span style="font-size:11px;width:84px;color:var(--ink-3)">Pitch</span><input class="range" id="vmPitch" type="range" min="0.5" max="1.5" step="0.05" value="${draft.pitch}"><output id="vmPitchOut">${draft.pitch.toFixed(2)}</output></div>
         <div style="margin-top:14px"><button class="btn btn-sm" data-preview>${icon('volume')} Preview voice</button></div>`;
     }
-    if (which === 'openai') {
-      return `
-        <div class="form-stack">
-          <div class="field">
-            <label for="vmOpenaiKey">OpenAI API key</label>
-            <div class="key-row">
-              <input class="input" id="vmOpenaiKey" type="password" spellcheck="false" autocomplete="off" placeholder="sk-…" value="${esc(draft.openaiKey)}">
-              <button class="btn btn-sm" data-toggle-key="vmOpenaiKey" type="button" title="Show key">${icon('key')}</button>
-            </div>
-            <span class="hint">Create a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">platform.openai.com</a>. Billed by OpenAI per character.</span>
-          </div>
-          <div class="field">
-            <label>Voice</label>
-            <div class="voice-grid">
-              ${['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'].map(v =>
-                `<button class="voice-chip${draft.openaiVoice === v ? ' is-active' : ''}" data-oa-voice="${v}">${v.charAt(0).toUpperCase() + v.slice(1)}</button>`
-              ).join('')}
-            </div>
-          </div>
-          <div class="tp-grid2">
-            <div class="field">
-              <label for="vmOpenaiModel">Model</label>
-              <select class="select" id="vmOpenaiModel">
-                <option value="gpt-4o-mini-tts"${draft.openaiModel === 'gpt-4o-mini-tts' ? ' selected' : ''}>gpt-4o-mini-tts · expressive</option>
-                <option value="tts-1-hd"${draft.openaiModel === 'tts-1-hd' ? ' selected' : ''}>tts-1-hd · high quality</option>
-                <option value="tts-1"${draft.openaiModel === 'tts-1' ? ' selected' : ''}>tts-1 · fast</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Speed</label>
-              <div class="slider-line" style="height:40px"><input class="range" id="vmRate" type="range" min="0.5" max="2" step="0.05" value="${draft.rate}"><output id="vmRateOut">${draft.rate.toFixed(2)}×</output></div>
-            </div>
-          </div>
-          <div class="field">
-            <label for="vmInstructions">Narration style <span class="dim" style="font-weight:400">· optional</span></label>
-            <textarea class="input" id="vmInstructions" rows="2" placeholder="Warm, clear audiobook narration. Unhurried but engaged.">${esc(draft.instructions)}</textarea>
-          </div>
-          <div><button class="btn btn-sm" data-preview>${icon('sparkles')} Preview voice</button></div>
-        </div>`;
-    }
-    if (which === 'outloud') {
-      return `
-        <div class="field" style="margin-bottom:14px">
-          <label>Out Loud voices <span class="dim" style="font-weight:400">· local Kokoro-82M</span></label>
-          <div class="outloud-status" id="outloudStatus"><span class="busy-dot"></span><span>Looking for Out Loud…</span></div>
-          <p class="hint">Free, 100% offline voices. Install and open <a href="https://github.com/light-cloud-com/out-loud/releases/latest" target="_blank" rel="noopener noreferrer">Out Loud</a>; it must be running on this computer while you listen.</p>
-        </div>
-        <div id="outloudVoices"><div class="voice-none">Checking for the Out Loud app…</div></div>
-        <div class="slider-line" style="margin-top:12px"><span style="font-size:11px;width:84px;color:var(--ink-3)">Speed</span><input class="range" id="vmRate" type="range" min="0.5" max="2" step="0.05" value="${draft.rate}"><output id="vmRateOut">${draft.rate.toFixed(2)}×</output></div>
-        <div class="field" style="margin-top:12px">
-          <label for="vmOutloudVoice">Voice or blend</label>
-          <input class="input" id="vmOutloudVoice" style="font-size:12px" value="${esc(draft.outloudVoice || OUTLOUD_DEFAULT_VOICE)}" placeholder="af_heart or af_heart*0.7 + af_bella*0.3">
-          <span class="hint">You can blend voices, e.g. <code>af_heart*0.6 + am_michael*0.4</code>.</span>
-        </div>
-        <div style="margin-top:14px"><button class="btn btn-sm" data-preview>${icon('headphones')} Preview voice</button></div>`;
-    }
 
-    // elevenlabs
+    // Piper — full catalog
+    const all = getPiperVoices();
+    const selected = piperVoiceById(draft.piperVoice);
+    const languages = [...new Set(all.map(v => v.language).filter(Boolean))].sort((a, b) => (a === 'English' ? -1 : b === 'English' ? 1 : a.localeCompare(b)));
     return `
-      <div class="form-stack">
-        <div class="field">
-          <label for="vmElevenKey">ElevenLabs API key</label>
-          <div class="key-row">
-            <input class="input" id="vmElevenKey" type="password" spellcheck="false" autocomplete="off" placeholder="xi-…" value="${esc(draft.elevenKey)}">
-            <button class="btn btn-sm" data-toggle-key="vmElevenKey" type="button" title="Show key">${icon('key')}</button>
-          </div>
-          <span class="hint">Create a key at <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">elevenlabs.io</a>. The free tier includes a monthly character allowance.</span>
+      <div class="field" style="margin-bottom:10px">
+        <label>Piper voices <span class="dim" style="font-weight:400">· ${all.length} voices · free · offline</span></label>
+        <div style="display:flex;gap:8px;margin-top:2px">
+          <input class="input" id="vmPiperSearch" placeholder="Search voices" style="flex:1;height:34px" autocomplete="off">
+          <select class="select" id="vmPiperLang" style="width:150px;height:34px" aria-label="Language">
+            <option value="all" selected>All languages</option>
+            ${languages.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('')}
+          </select>
         </div>
-        <div class="field">
-          <label>Voice preset</label>
-          <div class="voice-grid">
-            ${ELEVEN_PRESETS.map(v => `<button class="voice-chip${draft.elevenVoice === v.id ? ' is-active' : ''}" data-el-voice="${v.id}">${v.name}</button>`).join('')}
-          </div>
-          <input class="input" id="vmElevenVoice" placeholder="Or paste a voice ID" value="${esc(draft.elevenVoice)}" style="margin-top:8px;font-size:12px">
-        </div>
-        <div class="tp-grid2">
-          <div class="field">
-            <label for="vmElevenModel">Model</label>
-            <select class="select" id="vmElevenModel">
-              <option value="eleven_multilingual_v2"${draft.elevenModel === 'eleven_multilingual_v2' ? ' selected' : ''}>multilingual v2 · natural</option>
-              <option value="eleven_turbo_v2_5"${draft.elevenModel === 'eleven_turbo_v2_5' ? ' selected' : ''}>turbo v2.5 · fast</option>
-              <option value="eleven_flash_v2_5"${draft.elevenModel === 'eleven_flash_v2_5' ? ' selected' : ''}>flash v2.5 · fastest</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Speed</label>
-            <div class="slider-line" style="height:40px"><input class="range" id="vmRate" type="range" min="0.5" max="2" step="0.05" value="${draft.rate}"><output id="vmRateOut">${draft.rate.toFixed(2)}×</output></div>
-          </div>
-        </div>
-        <div><button class="btn btn-sm" data-preview>${icon('mic')} Preview voice</button></div>
-      </div>`;
+        <div class="piper-note" id="piperNote" style="margin-top:8px">First use downloads about ${selected.sizeMB} MB for ${esc(selected.name)}. After that it is cached offline.</div>
+        <div class="voice-list" id="piperList" style="max-height:270px;margin-top:8px"></div>
+      </div>
+      <div id="piperSpeakerWrap"></div>
+      <div class="slider-line"><span style="font-size:11px;width:84px;color:var(--ink-3)">Speed</span><input class="range" id="vmRate" type="range" min="0.5" max="2" step="0.05" value="${draft.rate}"><output id="vmRateOut">${draft.rate.toFixed(2)}×</output></div>
+      <div style="margin-top:14px"><button class="btn btn-sm" data-preview>${icon('headphones')} Download &amp; preview</button></div>
+      <p class="hint" style="margin-top:10px">The first preview loads the model; it can take a minute. Later sentences are generated while the previous one is playing. Australian English is a community model. Texas drawl isn’t available in the open voice set; celebrity voice clones are not included. Sources: <a href="https://github.com/rhasspy/piper" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">rhasspy/piper</a> · <a href="https://huggingface.co/rhasspy/piper-voices" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">voice models</a>.</p>`;
+  }
+
+  function renderPiperList() {
+    const list = tabBody.querySelector('#piperList');
+    if (!list) return;
+    const search = (tabBody.querySelector('#vmPiperSearch')?.value || '').trim().toLowerCase();
+    const lang = tabBody.querySelector('#vmPiperLang')?.value || 'all';
+    const selected = piperVoiceById(draft.piperVoice);
+    let voices = getPiperVoices();
+    if (lang !== 'all') voices = voices.filter(v => v.language === lang);
+    if (search) {
+      voices = voices.filter(v => `${v.name} ${v.language} ${v.country} ${v.accent}`.toLowerCase().includes(search));
+    }
+    const groups = new Map();
+    for (const v of voices) {
+      const key = v.language || 'Other';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(v);
+    }
+    if (!voices.length) {
+      list.innerHTML = '<div class="voice-none">No voices match that search.</div>';
+      return;
+    }
+    list.innerHTML = [...groups.entries()].map(([language, items]) => `
+      <div class="voice-group-label">${esc(language)}</div>
+      ${items.map(v => `<button class="voice-opt${v.id === selected.id ? ' is-active' : ''}" data-piper-voice="${esc(v.id)}">
+        <span class="playing-dot"></span>
+        <span class="vname">${esc(v.name)}</span>
+        <span class="vlang">${esc(v.country || v.accent)}${v.num_speakers > 1 ? ` · ${v.num_speakers} speakers` : ''}</span>
+        ${v.community ? '<span class="vtag">Community</span>' : (v.quality ? `<span class="vtag">${esc(v.quality)}</span>` : '')}
+      </button>`).join('')}
+    `).join('');
+    renderPiperSpeaker();
+    updatePiperNote();
+  }
+
+  function renderPiperSpeaker() {
+    const wrap = tabBody.querySelector('#piperSpeakerWrap');
+    if (!wrap) return;
+    const v = piperVoiceById(draft.piperVoice);
+    if (!v || v.num_speakers <= 1) { wrap.innerHTML = ''; return; }
+    const entries = Object.entries(v.speaker_id_map || {}).sort((a, b) => Number(a[1]) - Number(b[1]));
+    const options = entries.length ? entries : Array.from({ length: v.num_speakers }, (_, i) => [`Speaker ${i}`, i]);
+    wrap.innerHTML = `<div class="field" style="margin:4px 0 12px">
+      <label for="vmPiperSpeaker">Speaker <span class="dim" style="font-weight:400">· ${v.num_speakers} available</span></label>
+      <select class="select" id="vmPiperSpeaker">
+        ${options.map(([name, id]) => `<option value="${Number(id)}"${Number(id) === Number(draft.piperSpeaker) ? ' selected' : ''}>${esc(String(name).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))}</option>`).join('')}
+      </select>
+    </div>`;
+  }
+
+  function updatePiperNote() {
+    const note = tabBody.querySelector('#piperNote');
+    if (!note) return;
+    const v = piperVoiceById(draft.piperVoice);
+    const sp = piperSpeakerName(v, draft.piperSpeaker);
+    note.textContent = `First use downloads about ${v.sizeMB} MB for ${v.name}${sp ? ` · ${sp}` : ''}. After that it is cached offline.`;
   }
 
   async function testVoice(btn) {
-    const probe = { ...draft, enabled: true, provider: tab === 'silent' ? original.provider : tab };
-    if (tab === 'system' && !probe.voiceURI) probe.voiceURI = englishVoices()[0]?.voiceURI || '';
-    if (tab === 'openai' && !draft.openaiKey) { toast('Add your OpenAI API key to preview this voice.', 'err'); return; }
-    if (tab === 'elevenlabs' && !draft.elevenKey) { toast('Add your ElevenLabs API key to preview this voice.', 'err'); return; }
-    if (tab === 'outloud' && !draft.outloudVoice) draft.outloudVoice = OUTLOUD_DEFAULT_VOICE;
+    const probe = { ...draft, enabled: true, provider: tab === 'silent' ? original.provider || 'piper' : tab };
+    if (probe.provider === 'system' && !probe.voiceURI) probe.voiceURI = englishVoices()[0]?.voiceURI || '';
+    if (probe.provider === 'piper' && !probe.piperVoice) probe.piperVoice = 'en_US-lessac-medium';
+    if (probe.provider === 'piper') probe.piperSpeaker = draft.piperSpeaker || 0;
     btn.disabled = true;
     const old = btn.innerHTML;
-    btn.innerHTML = '<span class="busy-dot"></span> Generating…';
+    btn.innerHTML = tab === 'piper' ? '<span class="busy-dot"></span> Preparing voice…' : '<span class="busy-dot"></span> Playing…';
     try {
       await previewSpeech(probe);
     } catch (err) {
@@ -589,42 +541,17 @@ export function openVoiceModal({ onSaved } = {}) {
       renderTabs();
       return;
     }
-    if (e.target.closest('[data-outloud-refresh]')) {
-      hydrateOutLoud(true);
-      return;
-    }
     const voiceBtn = e.target.closest('[data-voice-uri]');
     if (voiceBtn) {
       draft.voiceURI = voiceBtn.dataset.voiceUri;
       tabBody.querySelectorAll('[data-voice-uri]').forEach(b => b.classList.toggle('is-active', b === voiceBtn));
       return;
     }
-    const oa = e.target.closest('[data-oa-voice]');
-    if (oa) {
-      draft.openaiVoice = oa.dataset.oaVoice;
-      tabBody.querySelectorAll('[data-oa-voice]').forEach(b => b.classList.toggle('is-active', b === oa));
-      return;
-    }
-    const el = e.target.closest('[data-el-voice]');
-    if (el) {
-      draft.elevenVoice = el.dataset.elVoice;
-      tabBody.querySelectorAll('[data-el-voice]').forEach(b => b.classList.toggle('is-active', b === el));
-      const input = tabBody.querySelector('#vmElevenVoice');
-      if (input) input.value = draft.elevenVoice;
-      return;
-    }
-    const ol = e.target.closest('[data-outloud-voice]');
-    if (ol) {
-      draft.outloudVoice = ol.dataset.outloudVoice;
-      tabBody.querySelectorAll('[data-outloud-voice]').forEach(b => b.classList.toggle('is-active', b === ol));
-      const input = tabBody.querySelector('#vmOutloudVoice');
-      if (input) input.value = draft.outloudVoice;
-      return;
-    }
-    const toggle = e.target.closest('[data-toggle-key]');
-    if (toggle) {
-      const input = tabBody.querySelector(`#${toggle.dataset.toggleKey}`);
-      if (input) input.type = input.type === 'password' ? 'text' : 'password';
+    const piperBtn = e.target.closest('[data-piper-voice]');
+    if (piperBtn) {
+      draft.piperVoice = piperBtn.dataset.piperVoice;
+      draft.piperSpeaker = 0;
+      renderPiperList();
     }
   });
 
@@ -638,19 +565,25 @@ export function openVoiceModal({ onSaved } = {}) {
       draft.pitch = Number(e.target.value);
       const out = tabBody.querySelector('#vmPitchOut');
       if (out) out.textContent = draft.pitch.toFixed(2);
-    } else if (id === 'vmOpenaiKey') draft.openaiKey = e.target.value.trim();
-    else if (id === 'vmElevenKey') draft.elevenKey = e.target.value.trim();
-    else if (id === 'vmInstructions') draft.instructions = e.target.value;
-    else if (id === 'vmElevenVoice') draft.elevenVoice = e.target.value.trim();
-    else if (id === 'vmOutloudVoice') draft.outloudVoice = e.target.value.trim() || OUTLOUD_DEFAULT_VOICE;
+    } else if (id === 'vmPause') {
+      draft.sentencePause = Number(e.target.value);
+      body.querySelector('#vmPauseOut').textContent = `${draft.sentencePause.toFixed(2)}s`;
+    } else if (id === 'vmPiperSearch') {
+      renderPiperList();
+    } else if (id === 'vmPiperSpeaker') {
+      draft.piperSpeaker = Number(e.target.value);
+      updatePiperNote();
+    }
   });
 
   body.addEventListener('change', e => {
-    const id = e.target.id;
-    if (id === 'vmOpenaiModel') draft.openaiModel = e.target.value;
-    else if (id === 'vmElevenModel') draft.elevenModel = e.target.value;
-    else if (id === 'vmAutoAdvance') draft.autoAdvance = e.target.checked;
-    else if (id === 'vmHighlight') draft.highlight = e.target.checked;
+    if (e.target.id === 'vmAutoAdvance') draft.autoAdvance = e.target.checked;
+    else if (e.target.id === 'vmHighlight') draft.highlight = e.target.checked;
+    else if (e.target.id === 'vmPiperLang') renderPiperList();
+    else if (e.target.id === 'vmPiperSpeaker') {
+      draft.piperSpeaker = Number(e.target.value);
+      updatePiperNote();
+    }
   });
 
   const onVoices = () => { if (tab === 'system') renderTabs(); };
@@ -659,7 +592,8 @@ export function openVoiceModal({ onSaved } = {}) {
   foot.querySelector('[data-cancel]').onclick = () => m.close('cancel');
   foot.querySelector('[data-save]').onclick = () => {
     draft.enabled = tab !== 'silent';
-    draft.provider = tab === 'silent' ? (original.provider || 'system') : tab;
+    draft.provider = tab === 'silent' ? (original.provider || 'piper') : tab;
+    if (tab === 'piper') draft.piperSpeaker = draft.piperSpeaker || 0;
     savePrefs({ tts: draft });
     stopPreview();
     m.close('save');

@@ -189,7 +189,7 @@ function emptyStateMarkup() {
       </div>
     </section>
     <div class="feature-strip">
-      <div class="feature"><div class="fi">${icon('headphones')}</div><div><strong>Natural narration</strong><p>Free system voices read with you — or add an OpenAI or ElevenLabs key for studio-quality audio.</p></div></div>
+      <div class="feature"><div class="fi">${icon('headphones')}</div><div><strong>Natural narration</strong><p>Free Piper neural voices read with you — offline, with American, British, Scottish and Australian accents.</p></div></div>
       <div class="feature"><div class="fi">${icon('shield')}</div><div><strong>Everything stays local</strong><p>Your files, progress, bookmarks and notes live in this browser. Nothing is uploaded.</p></div></div>
       <div class="feature"><div class="fi">${icon('type')}</div><div><strong>Made for long reads</strong><p>Six typefaces, four themes, and comfortable control over size, spacing and measure.</p></div></div>
     </div>`;

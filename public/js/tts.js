@@ -914,7 +914,12 @@ export class SpeechEngine {
       return;
     }
     const next = this.index + 1;
-    const pauseMs = Math.round(clampNum(getPrefs().tts.sentencePause ?? 0.2, 0, 1.5) * 1000);
+    // A timer between sentences can be frozen on a locked phone, which made
+    // narration stop at the end of a page. In the background, continue now.
+    const background = document.visibilityState === 'hidden' || !document.hasFocus();
+    const pauseMs = background
+      ? 0
+      : Math.round(clampNum(getPrefs().tts.sentencePause ?? 0.2, 0, 1.5) * 1000);
     if (pauseMs > 0) {
       const token = this._token;
       clearTimeout(this._pauseTimer);

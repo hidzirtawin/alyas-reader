@@ -198,6 +198,8 @@ function getRefs() {
     moreBtn: $('#moreBtn'),
     footLeft: $('#footLeft'),
     footRight: $('#footRight'),
+    footPrev: $('#footPrev'),
+    footNext: $('#footNext'),
     progressFill: $('#progressFill'),
     ttsDock: $('#ttsDock'),
     ttsEq: $('#ttsEq'),
@@ -318,8 +320,15 @@ function wireEvents(state) {
 
   refs.tocList.onclick = e => handleTocClick(state, e);
   refs.tocList.onsubmit = e => {
-    if (state.mode !== 'pdf' && state.mode !== 'comic') return;
     e.preventDefault();
+    if (state.mode === 'reflow') {
+      const idx = Number(refs.tocList.querySelector('#chapterJump')?.value);
+      if (Number.isFinite(idx)) {
+        closeToc(state);
+        gotoChapter(state, idx);
+      }
+      return;
+    }
     const input = refs.tocList.querySelector('#pageJump');
     const p = Number(input?.value);
     if (Number.isFinite(p) && p >= 1) {
@@ -327,6 +336,18 @@ function wireEvents(state) {
       else state.comicView?.showPage(p);
       closeToc(state);
     }
+  };
+
+  refs.footLeft.onclick = () => openToc(state);
+  refs.footPrev.onclick = () => {
+    if (state.mode === 'pdf') state.pdfView?.scrollToPage(Math.max(1, (state.page || 1) - 1), { smooth: true });
+    else if (state.mode === 'comic') state.comicView?.prevPage();
+    else gotoChapter(state, state.chapterIndex - 1);
+  };
+  refs.footNext.onclick = () => {
+    if (state.mode === 'pdf') state.pdfView?.scrollToPage(Math.min(state.numPages || 1, (state.page || 1) + 1), { smooth: true });
+    else if (state.mode === 'comic') state.comicView?.nextPage();
+    else gotoChapter(state, state.chapterIndex + 1);
   };
 
   refs.typePanelBody.onclick = e => handleTypeClick(state, e);
@@ -699,7 +720,18 @@ function updateReflowProgress(state, { queue = true } = {}) {
   refs.progressFill.style.width = `${pct}%`;
   refs.footLeft.textContent = `Chapter ${state.chapterIndex + 1} of ${n}`;
   refs.footRight.textContent = pct >= 99.9 ? 'Finished' : `${Math.round(pct)}% · ${formatTimeLeft(remaining)}`;
+  updateFootNav(state);
   if (queue) state.queueSave?.();
+}
+
+function updateFootNav(state) {
+  if (!refs?.footPrev) return;
+  const reflow = state.mode === 'reflow';
+  const total = reflow ? (state.book?.chapters?.length || 1) : (state.numPages || 1);
+  const current = reflow ? (state.chapterIndex + 1) : (state.page || 1);
+  refs.footPrev.disabled = current <= 1;
+  refs.footNext.disabled = current >= total;
+  refs.footLeft.title = reflow ? 'Open contents and jump to a chapter' : 'Open pages and jump to a page';
 }
 
 function updateBookmarkButton(state) {
@@ -1577,6 +1609,7 @@ function updatePageProgress(state) {
   refs.footLeft.textContent = `Page ${state.page} of ${state.numPages}`;
   refs.footRight.textContent = `${Math.round(pct)}%`;
   refs.readerChapterTitle.textContent = `Page ${state.page}`;
+  updateFootNav(state);
   updateTocActive(state);
 }
 
@@ -1642,11 +1675,20 @@ function renderToc(state) {
   }
 
   refs.tocTitle.textContent = 'Contents';
-  if (!state.toc?.length) {
+  if (!state.book?.chapters?.length) {
     refs.tocList.innerHTML = '<div class="toc-empty">This book doesn’t include a table of contents.</div>';
     return;
   }
-  refs.tocList.innerHTML = state.toc.map(item => `
+  const jump = `<form class="pdf-jump chapter-jump" autocomplete="off">
+    <label for="chapterJump">Jump to chapter</label>
+    <div>
+      <select class="select" id="chapterJump" style="flex:1">
+        ${state.book.chapters.map((c, i) => `<option value="${i}"${i === state.chapterIndex ? ' selected' : ''}>${esc(c.label || `Chapter ${i + 1}`)}</option>`).join('')}
+      </select>
+      <button class="btn btn-sm btn-primary" type="submit">Go</button>
+    </div>
+  </form>`;
+  refs.tocList.innerHTML = jump + state.toc.map(item => `
     <button class="toc-item depth-${Math.min(item.depth || 0, 2)}${item.chapterIndex === state.chapterIndex ? ' is-active' : ''}"
       data-toc-chapter="${item.chapterIndex}"${item.anchor ? ` data-toc-anchor="${esc(item.anchor)}"` : ''}>
       <span class="toc-num">${(item.depth || 0) === 0 ? String(item.chapterIndex + 1).padStart(2, '0') : ''}</span>

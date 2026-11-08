@@ -156,7 +156,14 @@
 
   <div class="reader-foot">
     <div class="reader-progress"><i id="progressFill"></i></div>
-    <div class="reader-foot-meta"><span id="footLeft"></span><span id="footRight"></span></div>
+    <div class="reader-foot-meta">
+      <div class="foot-nav">
+        <button class="foot-nav-btn" id="footPrev" aria-label="Previous chapter or page" title="Previous">‹</button>
+        <button class="foot-nav-label" id="footLeft" title="Open contents"></button>
+        <button class="foot-nav-btn" id="footNext" aria-label="Next chapter or page" title="Next">›</button>
+      </div>
+      <span id="footRight"></span>
+    </div>
   </div>
 
   <div class="tts-dock" id="ttsDock" hidden>

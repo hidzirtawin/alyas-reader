@@ -909,8 +909,24 @@ textarea.input { height: auto; min-height: 84px; padding: 11px 13px; resize: ver
 }
 .reader-progress { height: 3px; border-radius: 999px; background: color-mix(in srgb, var(--reader-ink) 9%, transparent); overflow: hidden; margin-bottom: 7px; }
 .reader-progress i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .3s var(--ease); }
-.reader-foot-meta { display: flex; justify-content: space-between; font-family: var(--font-ui); font-size: 9.5px; letter-spacing: .03em; color: var(--reader-ink-2); opacity: .75; padding-bottom: 2px; }
-.reader-foot-meta span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48%; }
+.reader-foot-meta { display: flex; justify-content: space-between; align-items: center; font-family: var(--font-ui); font-size: 9.5px; letter-spacing: .03em; color: var(--reader-ink-2); padding-bottom: 2px; }
+.reader-foot-meta > span { opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48%; }
+.foot-nav { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.foot-nav-btn {
+  width: 25px; height: 25px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  font-size: 18px; line-height: 1; color: var(--reader-ink-2);
+  transition: background .15s, color .15s;
+}
+.foot-nav-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--reader-ink) 9%, transparent); color: var(--reader-ink); }
+.foot-nav-btn:disabled { opacity: .3; cursor: default; }
+.foot-nav-label {
+  min-width: 0; max-width: 44vw; padding: 3px 2px;
+  font: inherit; letter-spacing: .03em; color: var(--reader-ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px;
+}
+.foot-nav-label:hover { color: var(--reader-ink); text-decoration-color: currentColor; }
 
 ::highlight(lumen-tts) { background-color: color-mix(in srgb, var(--accent) 26%, transparent); color: inherit; }
 ::highlight(lumen-tts) { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 60%, transparent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
@@ -1545,6 +1561,7 @@ kbd { font-family: var(--font-ui); font-size: 10px; font-weight: 600; min-width:
 .pdf-jump label { display: block; margin-bottom: 7px; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .pdf-jump > div { display: flex; gap: 7px; }
 .pdf-jump .input { height: 34px; flex: 1; }
+.pdf-jump .select { height: 34px; flex: 1; }
 .toc-empty {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 30px 16px; text-align: center;

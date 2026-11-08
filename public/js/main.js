@@ -60,7 +60,7 @@ const app = {
     }
     app.view = view;
     const meta = {
-      library: ['Library', 'Everything you’re reading, in one quiet place.'],
+      library: ['Alya’s Reader', 'Everything you’re reading, in one quiet place.'],
       bookmarks: ['Marks & notes', 'Bookmarks, highlights and thoughts — kept locally.'],
       settings: ['Settings', 'Make Alya’s Reader yours.'],
     }[view];
@@ -72,7 +72,7 @@ const app = {
       btn.classList.toggle('is-active', active);
       btn.setAttribute('aria-current', active ? 'page' : 'false');
     });
-    document.title = `Alya’s Reader — ${meta[0]}`;
+    document.title = view === 'library' ? 'Alya’s Reader' : `Alya’s Reader — ${meta[0]}`;
     app.renderCurrent();
     closeRail();
     $('#view')?.focus?.({ preventScroll: true });

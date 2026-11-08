@@ -104,10 +104,6 @@ export function renderSettings(app) {
               <input class="range" id="setTtsSpeed" type="range" min="0.5" max="2" step="0.05" value="${tts.rate}" aria-label="Default narration speed">
               <div class="set-row" style="margin-top:12px;margin-bottom:6px"><span class="set-label">Pause between sentences</span><output id="ttsPauseOut">${tts.sentencePause.toFixed(2)}s</output></div>
               <input class="range" id="setTtsPause" type="range" min="0" max="1" step="0.05" value="${tts.sentencePause}" aria-label="Pause between sentences">
-              <label class="switch" style="margin-top:12px">
-                <input type="checkbox" id="setAutoAdvance" ${tts.autoAdvance ? 'checked' : ''}>
-                <span class="track"></span><span class="switch-label">Continue to the next chapter</span>
-              </label>
               <label class="switch" style="margin-top:10px">
                 <input type="checkbox" id="setHighlight" ${tts.highlight ? 'checked' : ''}>
                 <span class="track"></span><span class="switch-label">Highlight the sentence being read</span>
@@ -116,7 +112,7 @@ export function renderSettings(app) {
                 <input type="checkbox" id="setAutoLanguage" ${tts.autoLanguageVoice !== false ? 'checked' : ''}>
                 <span class="track"></span><span class="switch-label">Use a matching voice for non-English books</span>
               </label>
-              <div style="margin-top:14px"><button class="btn btn-sm" data-preview-voice>${icon('volume')} Hear a sample</button></div>
+              <div style="margin-top:14px"><button class="btn btn-sm" data-preview-voice>${icon('loudhailer')} Hear a sample</button></div>
             </div>
             <p class="hint"><strong>Piper</strong> voices are free and run entirely in this browser. The first use downloads an open voice model (20–115 MB) from Hugging Face, then works offline. No accounts or API keys.</p>
           </div>
@@ -442,7 +438,6 @@ function onSettingsChange(app, e) {
   if (id === 'setFont') { setReaderPrefs({ font: e.target.value }); renderSettings(app); return; }
   if (id === 'setJustify') { setReaderPrefs({ justify: e.target.checked }); return; }
   if (id === 'setHyphens') { setReaderPrefs({ hyphens: e.target.checked }); return; }
-  if (id === 'setAutoAdvance') { savePrefs({ tts: { autoAdvance: e.target.checked } }, { silent: true }); return; }
   if (id === 'setAutoLanguage') { savePrefs({ tts: { autoLanguageVoice: e.target.checked } }, { silent: true }); return; }
   if (id === 'setHighlight') { savePrefs({ tts: { highlight: e.target.checked } }, { silent: true }); return; }
 }
@@ -501,10 +496,6 @@ export async function openVoiceModal({ onSaved } = {}) {
       <output id="vmPauseOut">${(draft.sentencePause ?? 0.2).toFixed(2)}s</output>
     </div>
     <div style="display:flex;flex-direction:column;gap:11px">
-      <label class="switch">
-        <input type="checkbox" id="vmAutoAdvance" ${draft.autoAdvance ? 'checked' : ''}>
-        <span class="track"></span><span class="switch-label">Continue to the next chapter automatically</span>
-      </label>
       <label class="switch">
         <input type="checkbox" id="vmHighlight" ${draft.highlight ? 'checked' : ''}>
         <span class="track"></span><span class="switch-label">Highlight the sentence being read</span>
@@ -615,7 +606,7 @@ export async function openVoiceModal({ onSaved } = {}) {
       </div>
       <div id="piperSpeakerWrap"></div>
       <div class="slider-line"><span style="font-size:11px;width:84px;color:var(--ink-3)">Speed</span><input class="range" id="vmRate" type="range" min="0.5" max="2" step="0.05" value="${draft.rate}"><output id="vmRateOut">${draft.rate.toFixed(2)}×</output></div>
-      <div style="margin-top:14px"><button class="btn btn-sm" data-preview>${icon('headphones')} Download &amp; preview</button></div>
+      <div style="margin-top:14px"><button class="btn btn-sm" data-preview>${icon('loudhailer')} Download &amp; preview</button></div>
       <div class="voice-progress" id="voiceProgress" hidden>
         <div class="voice-progress-track"><i id="voiceProgressFill"></i></div>
         <span class="voice-progress-text" id="voiceProgressText">Downloading voice…</span>
@@ -842,8 +833,7 @@ export async function openVoiceModal({ onSaved } = {}) {
   });
 
   body.addEventListener('change', e => {
-    if (e.target.id === 'vmAutoAdvance') draft.autoAdvance = e.target.checked;
-    else if (e.target.id === 'vmHighlight') draft.highlight = e.target.checked;
+    if (e.target.id === 'vmHighlight') draft.highlight = e.target.checked;
     else if (e.target.id === 'vmPiperLang') renderPiperList();
   });
 

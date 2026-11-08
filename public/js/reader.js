@@ -1436,15 +1436,14 @@ function updateTTSState(state, st) {
 }
 
 function onTTSEnd(state) {
-  const tts = getPrefs().tts;
   updateTTSState(state, 'idle');
   state.engine?._requestWakeLock?.();
   if (state.mode === 'pdf') {
-    if (tts.autoAdvance && state.page < state.numPages) advancePdfTTS(state);
-    else if (state.page >= state.numPages) toast('You’ve reached the end of the book.', 'ok');
+    if (state.page < state.numPages) advancePdfTTS(state);
+    else toast('You’ve reached the end of the book.', 'ok');
     return;
   }
-  if (tts.autoAdvance && state.chapterIndex < state.book.chapters.length - 1) {
+  if (state.chapterIndex < state.book.chapters.length - 1) {
     advanceReflowTTS(state).catch(err => {
       console.error('Could not continue narration', err);
       toast('Narration could not continue to the next chapter.', 'err');
@@ -1465,6 +1464,7 @@ async function advanceReflowTTS(state) {
 }
 
 async function advancePdfTTS(state) {
+  if (state.ttsAdvancing) return;
   state.ttsAdvancing = true;
   try {
     let p = (state.page || 1) + 1;
@@ -1483,6 +1483,9 @@ async function advancePdfTTS(state) {
     openDock(state);
     state.engine.load(sentences.map(s => ({ ...s, page: p })), { autoplay: true, start: 0 });
     updateMediaSession(state);
+  } catch (err) {
+    console.error('Could not continue PDF narration', err);
+    toast('Narration could not continue to the next page.', 'err');
   } finally {
     setTimeout(() => { state.ttsAdvancing = false; }, 300);
   }

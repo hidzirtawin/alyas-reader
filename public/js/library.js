@@ -112,7 +112,7 @@ function heroMarkup(app, { book, progress }) {
         ${started ? `<div class="hero-meter"><div class="bar"><i style="width:${percent}%"></i></div><span>${percent}% read</span></div>` : ''}
         <div class="hero-actions">
           <button class="btn btn-primary" data-hero-open>${icon('play')} ${started ? 'Continue reading' : 'Start reading'}</button>
-          ${narration ? `<button class="btn" data-hero-listen>${icon('headphones')} Listen</button>` : ''}
+          ${narration ? `<button class="btn" data-hero-listen>${icon('loudhailer')} Listen</button>` : ''}
         </div>
       </div>
       <div class="hero-meta">
@@ -189,7 +189,7 @@ function emptyStateMarkup() {
       </div>
     </section>
     <div class="feature-strip">
-      <div class="feature"><div class="fi">${icon('headphones')}</div><div><strong>Natural narration</strong><p>Free Piper neural voices read with you — offline, with American, British, Scottish and Australian accents.</p></div></div>
+      <div class="feature"><div class="fi">${icon('loudhailer')}</div><div><strong>Natural narration</strong><p>Free Piper neural voices read with you — offline, with American, British, Scottish and Australian accents.</p></div></div>
       <div class="feature"><div class="fi">${icon('shield')}</div><div><strong>Everything stays local</strong><p>Your files, progress, bookmarks and notes live in this browser. Nothing is uploaded.</p></div></div>
       <div class="feature"><div class="fi">${icon('type')}</div><div><strong>Made for long reads</strong><p>Thirteen typefaces, a dyslexia-friendly mode, four themes, and comfortable control over size and spacing.</p></div></div>
     </div>`;
@@ -250,7 +250,7 @@ function openCardMenu(app, book, anchor) {
   const progress = app.progress.get(book.id);
   const items = [
     { label: progress ? 'Continue reading' : 'Read', icon: 'book', onSelect: () => app.openBook(book.id, targetFromProgress(progress, false)) },
-    ...(narration ? [{ label: 'Listen from here', icon: 'headphones', onSelect: () => app.openBook(book.id, targetFromProgress(progress, true)) }] : []),
+    ...(narration ? [{ label: 'Listen from here', icon: 'loudhailer', onSelect: () => app.openBook(book.id, targetFromProgress(progress, true)) }] : []),
     { sep: true },
     { label: 'Book details', icon: 'info', onSelect: () => openBookDetails(app, book) },
     {

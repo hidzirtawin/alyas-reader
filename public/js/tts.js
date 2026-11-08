@@ -197,6 +197,27 @@ export const PIPER_PRESETS = [
     voiceId: 'en_GB-northern_english_male-medium', speaker: 0, rate: 0.9,
     desc: 'Theatrical northern British delivery.',
   },
+  /* Character archetypes. Generic genres only — never a real performer. */
+  {
+    id: 'character-spy', name: 'Character · Suave spy', group: 'character',
+    voiceId: 'en_GB-alan-medium', speaker: 0, rate: 0.93,
+    desc: 'Smooth, dry British spy-thriller delivery.',
+  },
+  {
+    id: 'character-elder', name: 'Character · Wise elder', group: 'character',
+    voiceId: 'en_US-norman-medium', speaker: 0, rate: 0.9,
+    desc: 'Calm, weathered storyteller with a measured pace.',
+  },
+  {
+    id: 'character-cool', name: 'Character · West Coast cool', group: 'character',
+    voiceId: 'en_US-sam-medium', speaker: 0, rate: 0.94,
+    desc: 'Relaxed, laid-back American delivery.',
+  },
+  {
+    id: 'character-anchor', name: 'Character · News anchor', group: 'character',
+    voiceId: 'en_US-ljspeech-high', speaker: 0, rate: 1,
+    desc: 'Crisp, neutral broadcast read.',
+  },
 ];
 
 export function piperSpeakerName(voice, speaker = 0) {

@@ -48,6 +48,7 @@ Alya’s Reader runs [Piper](https://github.com/rhasspy/piper) (MIT) entirely in
 - A live **download progress bar** (percent and megabytes) in the voice picker and the reading dock
 - **Audiobook-style presets** for warm, classic, British and studio narration, plus a **LibriVox-style** LibriTTS voice trained on volunteer audiobook recordings
 - **Cinema-style originals** — noir, leading lady, leading man, epic trailer and stage presets, named by genre rather than by real performers
+- **Character archetypes** — suave spy, wise elder, West Coast cool and news anchor, written as generic styles rather than impersonations
 
 The first time you use a voice, its model is downloaded from Hugging Face and stored in the browser. Models range from about 20 MB to 115 MB; after that the voice works offline. No account or API key is involved, and your book text never leaves your device.
 

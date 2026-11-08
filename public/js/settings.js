@@ -450,22 +450,27 @@ export async function openVoiceModal({ onSaved } = {}) {
     const languages = [...new Set(all.map(v => v.language).filter(Boolean))].sort((a, b) => (a === 'English' ? -1 : b === 'English' ? 1 : a.localeCompare(b)));
     return `
       <div class="presets">
-        <div class="presets-head"><span>Narration styles</span><span class="dim">Audiobook &amp; cinema</span></div>
-        <div class="preset-subhead">Audiobook-inspired</div>
-        <div class="preset-grid">
-          ${PIPER_PRESETS.filter(p => (p.group || 'audiobook') === 'audiobook').map(p => `<button class="preset${p.voiceId === draft.piperVoice && Number(p.speaker || 0) === Number(draft.piperSpeaker || 0) ? ' is-active' : ''}" data-preset="${esc(p.id)}">
-            <span class="preset-name">${esc(p.name)}${p.tag ? `<em>${esc(p.tag)}</em>` : ''}</span>
-            <span class="preset-desc">${esc(p.desc)}</span>
-          </button>`).join('')}
-        </div>
-        <div class="preset-subhead">Cinema-inspired originals</div>
-        <div class="preset-grid">
-          ${PIPER_PRESETS.filter(p => p.group === 'cinema').map(p => `<button class="preset${p.voiceId === draft.piperVoice && Number(p.speaker || 0) === Number(draft.piperSpeaker || 0) ? ' is-active' : ''}" data-preset="${esc(p.id)}">
-            <span class="preset-name">${esc(p.name)}</span>
-            <span class="preset-desc">${esc(p.desc)}</span>
-          </button>`).join('')}
-        </div>
-        <p class="preset-note">Celebrity, Audible, Libby and OverDrive narrators are real people or licensed voices. These presets are original open Piper voices with a similar feel — no real person is cloned or impersonated. <strong>LibriVox-style</strong> uses LibriTTS, trained on volunteer LibriVox recordings.</p>
+        <div class="presets-head"><span>Narration styles</span><span class="dim">Audiobook, cinema &amp; character</span></div>
+        ${[
+          ['audiobook', 'Audiobook-inspired'],
+          ['cinema', 'Cinema-inspired originals'],
+          ['character', 'Character archetypes'],
+        ].map(([group, title]) => {
+          const items = PIPER_PRESETS.filter(p => (p.group || 'audiobook') === group);
+          return `<div class="preset-subhead">${title}</div>
+            <div class="preset-grid">
+              ${items.map(p => {
+                const active = p.voiceId === draft.piperVoice
+                  && Number(p.speaker || 0) === Number(draft.piperSpeaker || 0)
+                  && Math.abs(Number(p.rate ?? draft.rate) - Number(draft.rate)) < 0.001;
+                return `<button class="preset${active ? ' is-active' : ''}" data-preset="${esc(p.id)}">
+                  <span class="preset-name">${esc(p.name)}${p.tag ? `<em>${esc(p.tag)}</em>` : ''}</span>
+                  <span class="preset-desc">${esc(p.desc)}</span>
+                </button>`;
+              }).join('')}
+            </div>`;
+        }).join('')}
+        <p class="preset-note">Celebrity, Audible, Libby and OverDrive narrators are real people or licensed voices. These presets are original open Piper voices — no real person is cloned or impersonated. Character archetypes are generic and not endorsed by any performer. <strong>LibriVox-style</strong> uses LibriTTS, trained on volunteer LibriVox recordings.</p>
       </div>
       <div class="field" style="margin-bottom:10px;margin-top:12px">
         <label>Piper voices <span class="dim" style="font-weight:400">· ${all.length} voices · free · offline</span></label>

@@ -369,6 +369,63 @@ export function piperSpeakerName(voice, speaker = 0) {
   return `Speaker ${speaker}`;
 }
 
+export const OPENAI_VOICES = [
+  { id: 'alloy', name: 'Alloy', desc: 'Neutral and balanced.' },
+  { id: 'ash', name: 'Ash', desc: 'Clear and confident.' },
+  { id: 'ballad', name: 'Ballad', desc: 'Warm and expressive.' },
+  { id: 'coral', name: 'Coral', desc: 'Bright and friendly.' },
+  { id: 'echo', name: 'Echo', desc: 'Smooth male voice.' },
+  { id: 'fable', name: 'Fable', desc: 'Storytelling British voice.' },
+  { id: 'nova', name: 'Nova', desc: 'Warm American female voice.' },
+  { id: 'onyx', name: 'Onyx', desc: 'Deep male voice.' },
+  { id: 'sage', name: 'Sage', desc: 'Calm and measured.' },
+  { id: 'shimmer', name: 'Shimmer', desc: 'Soft and clear.' },
+  { id: 'verse', name: 'Verse', desc: 'Expressive and lively.' },
+];
+
+export async function openaiGenerate(text, tts = getPrefs().tts) {
+  const key = String(tts.openaiKey || '').trim();
+  if (!key) throw new Error('Add your OpenAI API key in voice settings first.');
+  const model = tts.openaiModel || 'gpt-4o-mini-tts';
+  const body = {
+    model,
+    voice: tts.openaiVoice || 'nova',
+    input: text,
+    response_format: 'mp3',
+    speed: clampNum(tts.rate ?? 1, 0.25, 4),
+  };
+  if (model.startsWith('gpt-4o') && tts.openaiInstructions) body.instructions = tts.openaiInstructions;
+  // OpenAI allows the hosted GitHub Pages origin but not localhost, so
+  // the bundled local server proxies the request when running locally.
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname)
+    || /^\d{1,3}(\.\d{1,3}){3}$/.test(location.hostname);
+  const endpoint = local ? '/api/openai-tts' : 'https://api.openai.com/v1/audio/speech';
+  const headers = { 'Content-Type': 'application/json' };
+  if (local) headers['x-openai-key'] = key;
+  else headers.Authorization = `Bearer ${key}`;
+  let res;
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error('Could not reach OpenAI. Check your internet connection.');
+  }
+  if (!res.ok) {
+    let message = `OpenAI could not generate speech (${res.status}).`;
+    try {
+      const data = await res.json();
+      if (data?.error?.message) message = data.error.message;
+    } catch {}
+    if (res.status === 401) message = 'OpenAI rejected the API key. Check it in voice settings.';
+    else if (res.status === 429) message = 'OpenAI rate limit or quota reached.';
+    throw new Error(message);
+  }
+  return res.blob();
+}
+
 export function describeVoice() {
   const tts = getPrefs().tts;
   if (!tts.enabled) return 'Silent reading';
@@ -376,6 +433,10 @@ export function describeVoice() {
     const v = piperVoiceById(tts.piperVoice);
     const sp = piperSpeakerName(v, tts.piperSpeaker);
     return `Piper · ${v.name}${sp ? ` · ${sp}` : ''}`;
+  }
+  if (tts.provider === 'openai') {
+    const v = OPENAI_VOICES.find(x => x.id === tts.openaiVoice) || OPENAI_VOICES[0];
+    return `OpenAI · ${v.name}`;
   }
   const v = findVoice(tts.voiceURI) || englishVoices()[0];
   return v ? `System · ${v.name}` : 'System voice';
@@ -760,7 +821,7 @@ export class SpeechEngine {
 
   // Called synchronously from a tap so iOS allows the later async playback.
   _primeAudio() {
-    if (this.provider !== 'piper') return;
+    if (!['piper', 'openai'].includes(this.provider)) return;
     this._startKeepAlive();
     if (!this._audioEl) this._audioEl = new Audio();
     if (this._primed) return;
@@ -1021,7 +1082,8 @@ export class SpeechEngine {
   /* ── Piper audio fetch / cache ──────────────────────────────── */
   _cacheKey(text) {
     const tts = getPrefs().tts;
-    const voice = this.voice?.voiceId || (tts.provider === 'piper' ? tts.piperVoice : tts.voiceURI);
+    const baseVoice = tts.provider === 'piper' ? tts.piperVoice : tts.provider === 'openai' ? tts.openaiVoice : tts.voiceURI;
+    const voice = this.voice?.voiceId || baseVoice;
     return `${tts.provider}|${voice}|${tts.rate}|${text}`;
   }
 
@@ -1039,7 +1101,7 @@ export class SpeechEngine {
   }
 
   async _getAudio(text) {
-    if (this.provider !== 'piper') throw new Error('No neural voice is selected.');
+    if (!['piper', 'openai'].includes(this.provider)) throw new Error('No neural voice is selected.');
     const key = this._cacheKey(text);
     const hit = this._cache.get(key);
     if (hit) { hit.at = Date.now(); return hit; }
@@ -1048,7 +1110,10 @@ export class SpeechEngine {
     const tts = getPrefs().tts;
     const voiceId = this.voice?.voiceId || tts.piperVoice;
     const speaker = this.voice?.voiceId ? (this.voice.speaker ?? 0) : tts.piperSpeaker;
-    const promise = piperGenerate(text, voiceId, speaker)
+    const job = this.provider === 'openai'
+      ? openaiGenerate(text, tts)
+      : piperGenerate(text, voiceId, speaker);
+    const promise = job
       .then(blob => {
         const url = URL.createObjectURL(blob);
         const entry = { url, at: Date.now() };
@@ -1093,7 +1158,7 @@ export class SpeechEngine {
 
   /* ── wake lock ───────────────────────────────────────────────── */
   _startKeepAlive() {
-    if (this.provider !== 'piper') return;
+    if (!['piper', 'openai'].includes(this.provider)) return;
     if (!this._keepAlive) {
       const audio = new Audio(silentAudioSrc());
       audio.loop = true;
@@ -1167,7 +1232,9 @@ export async function previewSpeech(tts, text = 'This is how I’ll read your bo
   audio.volume = 0.0001;
   const unlock = audio.play().catch(() => {});
 
-  const blob = await piperGenerate(text, tts.piperVoice, tts.piperSpeaker);
+  const blob = tts.provider === 'openai'
+    ? await openaiGenerate(text, tts)
+    : await piperGenerate(text, tts.piperVoice, tts.piperSpeaker);
   if (previewAudio !== audio) return; // the preview was cancelled meanwhile
   try { await unlock; } catch {}
   try { audio.pause(); audio.currentTime = 0; } catch {}

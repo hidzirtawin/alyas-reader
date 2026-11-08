@@ -47,6 +47,10 @@ const DEFAULTS = {
     provider: 'piper',
     piperVoice: 'en_US-libritts_r-medium',
     piperSpeaker: 0,
+    openaiKey: '',
+    openaiVoice: 'nova',
+    openaiModel: 'gpt-4o-mini-tts',
+    openaiInstructions: 'Warm, natural audiobook narration with gentle pacing.',
     voiceURI: '',
     rate: 0.96,
     pitch: 1,
@@ -83,11 +87,16 @@ function load() {
   // The old bundled default was Lessac; move that (and blank values) to the
   // new audiobook narrator. An explicitly chosen Piper voice is kept.
   const useNewDefault = !old.piperVoice || old.piperVoice === 'en_US-lessac-medium';
+  const provider = old.provider === 'openai' ? 'openai' : 'piper';
   merged.tts = {
     enabled: old.enabled !== false,
-    provider: 'piper',
+    provider,
     piperVoice: useNewDefault ? DEFAULTS.tts.piperVoice : old.piperVoice,
     piperSpeaker: Number.isFinite(Number(old.piperSpeaker)) ? Number(old.piperSpeaker) : 0,
+    openaiKey: typeof old.openaiKey === 'string' ? old.openaiKey : '',
+    openaiVoice: typeof old.openaiVoice === 'string' && old.openaiVoice ? old.openaiVoice : 'nova',
+    openaiModel: typeof old.openaiModel === 'string' && old.openaiModel ? old.openaiModel : 'gpt-4o-mini-tts',
+    openaiInstructions: typeof old.openaiInstructions === 'string' ? old.openaiInstructions : 'Warm, natural audiobook narration with gentle pacing.',
     voiceURI: typeof old.voiceURI === 'string' ? old.voiceURI : '',
     rate: Number.isFinite(Number(old.rate)) ? Number(old.rate) : DEFAULTS.tts.rate,
     pitch: Number.isFinite(Number(old.pitch)) ? Number(old.pitch) : 1,

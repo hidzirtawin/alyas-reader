@@ -52,7 +52,7 @@ const SECURITY_HEADERS = {
     "font-src 'self'",
     "media-src 'self' blob:",
     // Voice models and voice tensors are fetched once from Hugging Face.
-    "connect-src 'self' blob: data: https://huggingface.co https://*.huggingface.co https://*.hf.co",
+    "connect-src 'self' blob: data: https://huggingface.co https://*.huggingface.co https://*.hf.co https://api.openai.com",
     "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'none'",
@@ -112,6 +112,40 @@ async function serveStatic(req, res, urlPath) {
   fs.createReadStream(filePath).on('error', () => res.destroy()).pipe(res);
 }
 
+async function proxyOpenAI(req, res) {
+  const key = req.headers['x-openai-key'];
+  if (!key || !/^sk-/.test(String(key))) return send(res, 401, 'Missing OpenAI key');
+  const chunks = [];
+  let size = 0;
+  try {
+    for await (const chunk of req) {
+      size += chunk.length;
+      if (size > 120000) return send(res, 413, 'Request too large');
+      chunks.push(chunk);
+    }
+  } catch { return send(res, 400, 'Bad request'); }
+  try {
+    const upstream = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: Buffer.concat(chunks),
+    });
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    res.writeHead(upstream.status, {
+      ...SECURITY_HEADERS,
+      'Content-Type': upstream.headers.get('content-type') || 'audio/mpeg',
+      'Content-Length': buffer.length,
+      'Cache-Control': 'no-store',
+    });
+    return res.end(buffer);
+  } catch {
+    return send(res, 502, 'OpenAI request failed');
+  }
+}
+
 const server = http.createServer((req, res) => {
   let urlPath;
   try {
@@ -129,6 +163,11 @@ const server = http.createServer((req, res) => {
       'Content-Length': Buffer.byteLength(body),
     });
     return res.end(body);
+  }
+
+  if (urlPath === '/api/openai-tts') {
+    if (req.method !== 'POST') return send(res, 405, 'Method not allowed');
+    return proxyOpenAI(req, res);
   }
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {

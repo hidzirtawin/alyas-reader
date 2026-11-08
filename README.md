@@ -2,7 +2,7 @@
 
 A calm, local-first ebook and comic reader for your own files. Upload **EPUB, PDF, DOCX, ODT, RTF, HTML, FB2, TXT, Markdown, CBZ or CBR**, read in the typography you like, and listen with a natural voice — or turn narration off and read in silence.
 
-Your books stay in your browser. No accounts, no cloud library, no uploads. Voice models download once from the open Piper catalog.
+Your books stay in your browser. No accounts, no cloud library, no uploads. Piper voice models download once from the open catalog; an optional OpenAI cloud voice is available if you add your own API key.
 
 ```
 node server.js        # or: npm start
@@ -13,7 +13,7 @@ Requires Node.js 18 or newer. There are **no npm dependencies** — the browser 
 
 **Live site:** https://hidzirtawin.github.io/alyas-reader/
 
-The hosted build is static. **Piper** neural voices run entirely in the browser and work on both the hosted and local versions. A voice model downloads once from Hugging Face, is cached by the browser, and then works offline. No accounts or API keys.
+The hosted build is static. **Piper** neural voices run entirely in the browser and work on both the hosted and local versions. A voice model downloads once from Hugging Face, is cached by the browser, and then works offline. No account or key is needed for Piper. An optional OpenAI cloud voice can be enabled with your own API key.
 
 ---
 
@@ -70,6 +70,18 @@ The Australian voice is a community LibriVox model by DataCraftsmanAustralia, li
 
 Any Piper-compatible `.onnx` model with its `.onnx.json` config (or a zip containing both) can be imported from **Settings → Voice & narration → Configure → Piper → Import a Piper voice**. This is the way to use community models trained on [Mozilla Common Voice](https://github.com/common-voice/common-voice), LibriTTS or other open datasets. The files stay in your browser and can be removed from the same panel.
 
+### OpenAI cloud voices (optional)
+
+For the most human-sounding speech, open **Settings → Voice & narration → Configure → OpenAI**, paste an OpenAI API key, choose a model and voice, and save. Models:
+
+- **GPT-4o mini TTS** — most natural, supports delivery instructions such as “warm, unhurried audiobook reading”
+- **TTS-1 HD** — high quality, faster
+- **TTS-1** — fastest
+
+Voices include Alloy, Ash, Ballad, Coral, Echo, Fable, Nova, Onyx, Sage, Shimmer and Verse.
+
+**Privacy and cost:** the key is stored in this browser’s local storage. While the OpenAI voice is selected, each sentence is sent to OpenAI for synthesis; your books and library never leave the device otherwise. OpenAI bills your account per character. The hosted site calls OpenAI directly; the bundled local server proxies the call because OpenAI blocks browser requests from localhost. Switch back to Piper for free, offline narration.
+
 ### No voice at all
 
 Pick **Silent** in the voice picker, or turn off **Read aloud** in Settings. No speech engine is invoked; the Listen button and narration dock are hidden. Bookmarks, highlights, notes and progress are unaffected.
@@ -114,7 +126,7 @@ Piracy mirrors (LibGen, Z-Library, Anna's Archive, PDF Drive and similar) are de
 - Book files are read locally and stored in **IndexedDB** as blobs. They are never uploaded to a server.
 - Reading positions, bookmarks, highlights and notes are also local.
 - Settings use localStorage.
-- When you choose a Piper voice, its model and voice tensor are downloaded once from Hugging Face and cached in your browser. After that, narration is fully offline. Your book text is never sent anywhere.
+- When you choose a Piper voice, its model and voice tensor are downloaded once from Hugging Face and cached in your browser. After that, narration is fully offline. Your book text is never sent anywhere. Only if you deliberately select the optional OpenAI voice are the narrated sentences sent to OpenAI; the key and the rest of the library stay local.
 - “Export notes & data” downloads a JSON file with metadata, positions, bookmarks, highlights and settings. Book files are not included.
 - “Delete all books & marks” erases the local database; settings remain.
 

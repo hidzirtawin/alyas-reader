@@ -66,13 +66,19 @@ async function get(name, key) {
 }
 
 async function put(name, value) {
-  const s = await store(name, 'readwrite');
-  return wrap(s.put(value));
+  const db = await openDB();
+  const tx = db.transaction(name, 'readwrite');
+  const result = await wrap(tx.objectStore(name).put(value));
+  await done(tx); // wait for the commit so a reload can't lose the write
+  return result;
 }
 
 async function del(name, key) {
-  const s = await store(name, 'readwrite');
-  return wrap(s.delete(key));
+  const db = await openDB();
+  const tx = db.transaction(name, 'readwrite');
+  const result = await wrap(tx.objectStore(name).delete(key));
+  await done(tx);
+  return result;
 }
 
 async function byIndex(name, index, key) {
@@ -92,6 +98,16 @@ export const db = {
 
   async addFile(bookId, blob, name, type) {
     return put('files', { bookId, blob, name, type, savedAt: Date.now() });
+  },
+
+  async addBookWithFile(book, file) {
+    const dbi = await openDB();
+    const tx = dbi.transaction(['books', 'files'], 'readwrite');
+    tx.objectStore('books').put(book);
+    tx.objectStore('files').put({
+      bookId: book.id, blob: file, name: file.name, type: file.type, savedAt: Date.now(),
+    });
+    await done(tx);
   },
   getFile(bookId) { return get('files', bookId); },
   getBlob(bookId) { return get('files', bookId).then(r => r?.blob || null); },

@@ -165,7 +165,6 @@ function emptyStateMarkup() {
     <section class="empty-hero">
       <div class="empty-copy">
         <div class="eyebrow">A quiet place to read</div>
-        <h2>Your books.<br>Your <em>voice.</em></h2>
         <p>Drop in an EPUB, PDF, Word document, comic archive or plain text file. Settle into a typeface you love — or let a natural voice read it aloud while you listen.</p>
         <div class="empty-actions">
           <button class="btn btn-primary" data-add>${icon('plus')} Add your first book</button>
@@ -364,8 +363,8 @@ export async function importFiles(app, fileList) {
         lastOpenedAt: null,
         meta: probe.meta || {},
       };
-      await db.putBook(record);
-      await db.addFile(record.id, file, file.name, file.type);
+      // Metadata and file commit together, so a failed write can't leave a ghost book.
+      await db.addBookWithFile(record, file);
       known.add(`${file.name}|${file.size}`);
       added++;
       job.status = 'done';
@@ -381,6 +380,8 @@ export async function importFiles(app, fileList) {
   }
 
   if (added) {
+    // Ask the browser to keep this origin's storage instead of evicting it.
+    navigator.storage?.persist?.().catch?.(() => {});
     await app.reload({ render: false });
     app.renderCurrent?.();
     toast(added === 1 ? 'Book added to your library' : `${added} books added`, 'ok');

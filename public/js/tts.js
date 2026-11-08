@@ -642,6 +642,22 @@ export class SpeechEngine {
       if (document.visibilityState === 'visible') this._requestWakeLock();
     };
     document.addEventListener('visibilitychange', this._onVisibility);
+
+    // If the OS or a headset pauses audio without pausing the session,
+    // keep narration alive instead of silently stopping.
+    this._watchdog = setInterval(() => {
+      if (this.state === 'playing' && this._audio) {
+        this._requestWakeLock();
+        if (this._audio.ended) {
+          this._audio.onended = null;
+          this._advanceChunk();
+        } else if (this._audio.paused) {
+          this._audio.play().catch(() => {});
+        }
+      } else if (this.state === 'loading') {
+        this._requestWakeLock();
+      }
+    }, 4000);
   }
 
   get total() { return this.sentences.length; }
@@ -772,6 +788,7 @@ export class SpeechEngine {
     this.stop();
     try { speechSynthesis.removeEventListener?.('voiceschanged', this._onVoices); } catch {}
     document.removeEventListener('visibilitychange', this._onVisibility);
+    clearInterval(this._watchdog);
     this._clearCache();
     this.sentences = [];
     this._releaseWakeLock();
@@ -1002,9 +1019,9 @@ export class SpeechEngine {
   }
 
   _trimCache() {
-    if (this._cache.size <= 18) return;
+    if (this._cache.size <= 10) return;
     const entries = [...this._cache.entries()].sort((a, b) => a[1].at - b[1].at);
-    while (this._cache.size > 14 && entries.length) {
+    while (this._cache.size > 7 && entries.length) {
       const [key, entry] = entries.shift();
       this._cache.delete(key);
       if (entry.url !== this._audioUrl) URL.revokeObjectURL(entry.url);

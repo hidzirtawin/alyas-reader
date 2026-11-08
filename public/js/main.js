@@ -5,7 +5,7 @@ import { applyPrefs, getPrefs } from './prefs.js';
 import { renderLibrary, importFiles, refreshImportQueue } from './library.js';
 import { renderMarks } from './bookmarks.js';
 import { renderSettings } from './settings.js';
-import { openReader, closeReader } from './reader.js';
+import { openReader, closeReader, restoreReadingSession } from './reader.js';
 import { shortcutsModal, toast } from './ui.js';
 import { openBookSources } from './sources.js';
 import { startSleepTimer, cancelSleepTimer, getSleepTimer, formatSleepRemaining } from './sleep.js';
@@ -352,6 +352,7 @@ async function boot() {
     await app.reload({ render: false });
     app.go('library');
     navigator.storage?.persist?.().catch?.(() => {});
+    restoreReadingSession(app);
     warmDefaultVoice();
   } catch (err) {
     console.error(err);

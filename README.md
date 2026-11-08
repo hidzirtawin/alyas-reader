@@ -40,6 +40,7 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 - **Sleep timer** — choose 5 to 90 minutes in Settings or the reader menu; narration stops and the screen dims when it ends.
 - **Marks & notes** — bookmarks and four-colour highlights with notes. Everything is grouped by book and reopens at the exact spot.
 - **Autosave** — position, settings, bookmarks and highlights are saved as you read. Comic progress and bookmarks are page-based. Export a JSON backup of notes and progress at any time.
+- **Interruption recovery** — if the browser reloads or interrupts playback, Alya’s Reader reopens the same book and chapter and offers a Resume button for narration.
 - **Keyboard-first** — see shortcuts below.
 
 ## Narration

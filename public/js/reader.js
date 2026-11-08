@@ -25,6 +25,51 @@ import {
 
 let S = null;
 let refs = null;
+const READER_SESSION = 'alya.reader.session';
+
+function rememberReadingSession(state) {
+  if (!state || state.destroyed || !state.bookId) return;
+  try {
+    sessionStorage.setItem(READER_SESSION, JSON.stringify({
+      bookId: state.bookId,
+      chapterIndex: state.chapterIndex || 0,
+      page: state.page || null,
+      ratio: state.ratio || 0,
+      at: Date.now(),
+      playing: state.engine?.state === 'playing' || state.engine?.state === 'loading',
+    }));
+  } catch {}
+}
+
+function clearReadingSession() {
+  try { sessionStorage.removeItem(READER_SESSION); } catch {}
+}
+
+export function restoreReadingSession(app) {
+  let saved;
+  try { saved = JSON.parse(sessionStorage.getItem(READER_SESSION) || 'null'); } catch {}
+  if (!saved?.bookId || !saved.at) return false;
+  if (Date.now() - saved.at > 30 * 60 * 1000 || !app.books.some(b => b.id === saved.bookId)) {
+    clearReadingSession();
+    return false;
+  }
+  const target = {
+    chapterIndex: saved.chapterIndex || 0,
+    page: saved.page || undefined,
+    ratio: saved.ratio || 0,
+  };
+  setTimeout(() => { app.openBook(saved.bookId, target); }, 250);
+  if (saved.playing) {
+    setTimeout(() => {
+      toast('Narration was interrupted. Tap Resume to continue where you left off.', 'info', {
+        actionLabel: 'Resume',
+        duration: 20000,
+        onAction: () => window.lumen?.resumeTTS?.(),
+      });
+    }, 1200);
+  }
+  return true;
+}
 
 export async function openReader(app, bookId, target = {}) {
   if (S) await closeReader({ skipReload: true });
@@ -121,12 +166,14 @@ export async function openReader(app, bookId, target = {}) {
   wireEvents(state);
   updateReaderVoiceChip(state);
   app.pauseTTS = () => state.engine?.pause();
+  app.resumeTTS = () => startTTS(state, { autoplay: true });
   app.stopTTS = () => { state.engine?.stop(); closeTTS(state); };
 
   try {
     if (state.mode === 'pdf') await openPdfBook(state);
     else if (state.mode === 'comic') await openComicBook(state);
     else await openReflowBook(state);
+    rememberReadingSession(state);
   } catch (err) {
     console.error('Could not open book', err);
     if (!state.destroyed) showReaderError(state, err.message || 'This book could not be opened.');
@@ -179,7 +226,8 @@ export async function closeReader({ skipReload = false, skipSave = false } = {})
   document.body.classList.remove('reader-open');
   const shell = document.querySelector('.shell');
   if (shell) shell.inert = false;
-  if (state.app) { state.app.pauseTTS = null; state.app.stopTTS = null; }
+  if (state.app) { state.app.pauseTTS = null; state.app.resumeTTS = null; state.app.stopTTS = null; }
+  clearReadingSession();
   if (!skipReload) await state.app.reload();
 }
 
@@ -787,6 +835,7 @@ async function saveProgressNow(state) {
   if (loc.page) rec.page = loc.page;
   state.progressRec = rec;
   state.app.progress.set(state.bookId, rec);
+  rememberReadingSession(state);
   try { await db.putProgress(rec); } catch {}
 }
 
@@ -1275,6 +1324,7 @@ function firstVisibleSentence(state, sentences) {
 
 function onTTSSentence(state, sentence, index) {
   refs.ttsPos.textContent = `${index + 1} / ${state.engine.total}`;
+  rememberReadingSession(state);
   prefetchNextChapter(state, index);
   if (!getPrefs().tts.highlight) return;
   if (state.mode === 'pdf') {
@@ -1687,6 +1737,7 @@ function updatePageProgress(state) {
   refs.footLeft.textContent = `Page ${state.page} of ${state.numPages}`;
   refs.footRight.textContent = `${Math.round(pct)}%`;
   refs.readerChapterTitle.textContent = `Page ${state.page}`;
+  rememberReadingSession(state);
   updateFootNav(state);
   updateTocActive(state);
 }

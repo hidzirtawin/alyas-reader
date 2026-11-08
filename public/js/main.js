@@ -215,6 +215,41 @@ if ('speechSynthesis' in window) {
   } catch {}
 }
 
+/* ── Build & updates ─────────────────────────────────────────────── */
+const BUILD = document.querySelector('meta[name="app-build"]')?.content || 'dev';
+app.build = BUILD;
+
+function showUpdatePill() {
+  if (document.getElementById('updatePill')) return;
+  const pill = document.createElement('div');
+  pill.id = 'updatePill';
+  pill.className = 'update-pill';
+  pill.innerHTML = '<span>A new version is ready.</span><button type="button">Reload</button>';
+  pill.querySelector('button').addEventListener('click', () => location.reload());
+  document.body.appendChild(pill);
+}
+
+async function checkForUpdate() {
+  try {
+    const res = await fetch(new URL('version.json', document.baseURI), { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.build && data.build !== BUILD) showUpdatePill();
+  } catch {}
+}
+
+let lastUpdateCheck = 0;
+function checkForUpdateSoon() {
+  const now = Date.now();
+  if (now - lastUpdateCheck < 5 * 60 * 1000) return;
+  lastUpdateCheck = now;
+  checkForUpdate();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') checkForUpdateSoon();
+});
+window.addEventListener('focus', checkForUpdateSoon);
+
 /* ── Boot ────────────────────────────────────────────────────────── */
 async function boot() {
   applyPrefs();
@@ -241,6 +276,7 @@ async function boot() {
 }
 
 boot();
+checkForUpdateSoon();
 
 /* Let the reader/tools reach the shell helpers. */
 app.closeRail = closeRail;

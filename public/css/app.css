@@ -1188,6 +1188,23 @@ kbd { font-family: var(--font-ui); font-size: 10px; font-weight: 600; min-width:
   pointer-events: auto; max-width: 100%;
 }
 .toast.is-out { animation: toast-out .25s ease both; }
+
+.update-pill {
+  position: fixed; z-index: 210; left: 50%; bottom: 78px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 9px 8px 15px; border-radius: 999px;
+  background: #1d1913; color: #f4ecdd;
+  font-size: 12px; box-shadow: 0 14px 34px -14px rgba(10, 7, 4, .7);
+  border: 1px solid rgba(255,255,255,.12);
+  animation: toast-in .3s var(--ease) both; max-width: 92vw;
+}
+.update-pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.update-pill button {
+  flex: none; border: 0; border-radius: 999px; cursor: pointer;
+  padding: 6px 12px; font: inherit; font-weight: 600;
+  background: var(--accent-2); color: #221007;
+}
+.update-pill button:hover { background: #e7855c; }
 .toast svg { width: 15px; height: 15px; flex: none; }
 .toast.ok svg { color: #8fd0a0; }
 .toast.err svg { color: #f19a8c; }

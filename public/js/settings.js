@@ -1,5 +1,7 @@
 /* Settings: appearance, reading comfort, narration, data. */
 
+const BUILD = document.querySelector('meta[name="app-build"]')?.content || '1.0';
+
 import { db } from './db.js';
 import {
   getPrefs, savePrefs, setReaderPrefs, FONTS, THEMES, DEFAULT_READER,
@@ -184,7 +186,7 @@ export function renderSettings(app) {
             </div>
             <div class="divider"></div>
             <p class="hint" style="line-height:1.65">EPUB rendering, PDF.js, Mammoth and JSZip run entirely on your device. Natural narration uses <strong>Piper</strong> (MIT, from rhasspy/piper) running locally in your browser, or your operating system’s voices. No accounts or API keys.</p>
-            <p class="hint">Alya’s Reader · version 1.0</p>
+            <p class="hint">Alya’s Reader · build ${BUILD}</p>
           </div>
         </section>
       </div>

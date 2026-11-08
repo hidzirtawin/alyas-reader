@@ -7,6 +7,7 @@ import { renderMarks } from './bookmarks.js';
 import { renderSettings } from './settings.js';
 import { openReader, closeReader } from './reader.js';
 import { shortcutsModal, toast } from './ui.js';
+import { openBookSources, maybeOfferDownloadedBook } from './sources.js';
 import { loadPiperCatalog } from './tts.js';
 import { $, $$, clamp, formatBytes, debounce, icon } from './util.js';
 
@@ -68,6 +69,7 @@ const app = {
     $('#viewTitle').textContent = meta[0];
     $('#viewSubtitle').textContent = meta[1];
     $('#searchWrap').hidden = view !== 'library';
+    $('#freeBooksBtn').hidden = view !== 'library';
     $$('.rail-link').forEach(btn => {
       const active = btn.dataset.view === view;
       btn.classList.toggle('is-active', active);
@@ -100,6 +102,7 @@ const app = {
   openBook(id, target) { return openReader(app, id, target); },
   closeReader(opts) { return closeReader(opts); },
   showShortcuts: shortcutsModal,
+  openBookSources,
   pickFiles() { $('#fileInput')?.click(); },
 };
 
@@ -131,6 +134,7 @@ window.addEventListener('resize', () => {
 
 /* ── Add books ───────────────────────────────────────────────────── */
 $('#addBookBtn').addEventListener('click', () => app.pickFiles());
+$('#freeBooksBtn').addEventListener('click', () => openBookSources());
 $('#railAdd').addEventListener('click', () => app.pickFiles());
 $('#fileInput').addEventListener('change', e => {
   const files = Array.from(e.target.files || []);
@@ -246,9 +250,15 @@ function checkForUpdateSoon() {
   checkForUpdate();
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') checkForUpdateSoon();
+  if (document.visibilityState === 'visible') {
+    checkForUpdateSoon();
+    maybeOfferDownloadedBook();
+  }
 });
-window.addEventListener('focus', checkForUpdateSoon);
+window.addEventListener('focus', () => {
+  checkForUpdateSoon();
+  maybeOfferDownloadedBook();
+});
 
 /* ── Boot ────────────────────────────────────────────────────────── */
 async function boot() {
@@ -264,6 +274,7 @@ async function boot() {
     await app.reload({ render: false });
     app.go('library');
     navigator.storage?.persist?.().catch?.(() => {});
+    setTimeout(() => maybeOfferDownloadedBook(), 1200);
   } catch (err) {
     console.error(err);
     $('#view').innerHTML = `<div class="empty-list" style="margin-top:40px">

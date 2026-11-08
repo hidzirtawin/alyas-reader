@@ -45,6 +45,7 @@ Alya’s Reader runs [Piper](https://github.com/rhasspy/piper) (MIT) entirely in
 - American, British, Scottish, Northern English, Southern English and **Australian** accents
 - Multi-speaker models with a speaker picker
 - Adjustable speed and a **pause-between-sentences** control for natural reading rhythm
+- A live **download progress bar** (percent and megabytes) in the voice picker and the reading dock
 
 The first time you use a voice, its model is downloaded from Hugging Face and stored in the browser. Models range from about 20 MB to 115 MB; after that the voice works offline. No account or API key is involved, and your book text never leaves your device.
 
@@ -65,6 +66,18 @@ Download any “Enhanced” or “Premium” English voice; it will appear after
 Pick **Silent** in the voice picker, or turn off **Read aloud** in Settings. No speech engine is invoked; the Listen button and narration dock are hidden. Bookmarks, highlights, notes and progress are unaffected.
 
 Comic books are always silent because their pages are images; the Listen control is hidden automatically.
+
+## Free book sources
+
+**Free books** in the library toolbar opens a curated shelf of legal places to find ebooks:
+
+- public-domain libraries such as Project Gutenberg, Standard Ebooks, Internet Archive, Open Library and Planet eBook
+- free and discounted books from BookBoon, Smashwords, Obooko and Open Culture
+- audiobooks and catalogues such as LibriVox, Goodreads, BookBub and Google Books
+
+Every link opens in a new tab. Browsers cannot see files downloaded by another tab, so when you return,
+Alya's Reader offers to add the file you just downloaded — choose it once and it joins your library.
+Piracy mirrors (LibGen, Z-Library, Anna's Archive, PDF Drive and similar) are deliberately not linked.
 
 ## Keyboard shortcuts
 
@@ -137,7 +150,7 @@ public/
 - **Scanned PDFs** need an OCR text layer for narration and text selection; image-only pages have nothing to read aloud.
 - **Comics are image-based**, so narration is disabled for CBZ/CBR. Password-protected comic archives are not supported yet. CBR relies on libarchive’s RAR support; if a specific RAR variant fails, convert it to CBZ (a ZIP of page images).
 - **Legacy `.doc` / `.rtf` / MOBI / AZW** are not supported. Save as DOCX, EPUB or PDF first.
-- **Piper’s first use** downloads a voice model (about 20–115 MB) and can take a minute; later sentences are prefetched while the current one plays. The model is cached in the browser.
+- **Piper’s first use** downloads a voice model (about 20–115 MB) and can take a minute; a progress bar shows the download, and later sentences are prefetched while the current one plays. The model is cached in the browser.
 - **Very large books** (hundreds of MB) may exceed the browser’s storage quota. The library reports storage usage in Settings.
 - Alya’s Reader is a local web app; keep the server running while reading. Nothing is bundled with the project.
 

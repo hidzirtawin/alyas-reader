@@ -9,6 +9,7 @@ import {
 import {
   englishVoices, findVoice, previewSpeech, stopPreview, describeVoice,
   getPiperVoices, loadPiperCatalog, piperVoiceById, piperSpeakerName,
+  onPiperProgress, piperProgressLabel,
 } from './tts.js';
 import {
   modal, toast, confirmDialog,
@@ -218,9 +219,14 @@ function onSettingsClick(app, e) {
     const old = btn.innerHTML;
     btn.innerHTML = `<span class="busy-dot"></span> Playing…`;
     window.lumen?.pauseTTS?.();
+    const stopProgress = onPiperProgress(p => {
+      if (['downloading', 'preparing', 'generating'].includes(p.phase)) {
+        btn.innerHTML = `<span class="busy-dot"></span> ${piperProgressLabel(p)}`;
+      }
+    });
     previewSpeech(getPrefs().tts)
       .catch(err => toast(err.message || 'Could not play the sample.', 'err'))
-      .finally(() => { btn.disabled = false; btn.innerHTML = old; });
+      .finally(() => { stopProgress(); btn.disabled = false; btn.innerHTML = old; });
     return;
   }
   if (e.target.closest('#resetReader')) {
@@ -458,6 +464,10 @@ export async function openVoiceModal({ onSaved } = {}) {
       <div id="piperSpeakerWrap"></div>
       <div class="slider-line"><span style="font-size:11px;width:84px;color:var(--ink-3)">Speed</span><input class="range" id="vmRate" type="range" min="0.5" max="2" step="0.05" value="${draft.rate}"><output id="vmRateOut">${draft.rate.toFixed(2)}×</output></div>
       <div style="margin-top:14px"><button class="btn btn-sm" data-preview>${icon('headphones')} Download &amp; preview</button></div>
+      <div class="voice-progress" id="voiceProgress" hidden>
+        <div class="voice-progress-track"><i id="voiceProgressFill"></i></div>
+        <span class="voice-progress-text" id="voiceProgressText">Downloading voice…</span>
+      </div>
       <p class="hint" style="margin-top:10px">The first preview loads the model; it can take a minute. Later sentences are generated while the previous one is playing. Australian English is a community model. Texas drawl isn’t available in the open voice set; celebrity voice clones are not included. Sources: <a href="https://github.com/rhasspy/piper" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">rhasspy/piper</a> · <a href="https://huggingface.co/rhasspy/piper-voices" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">voice models</a>.</p>`;
   }
 
@@ -526,11 +536,27 @@ export async function openVoiceModal({ onSaved } = {}) {
     btn.disabled = true;
     const old = btn.innerHTML;
     btn.innerHTML = tab === 'piper' ? '<span class="busy-dot"></span> Preparing voice…' : '<span class="busy-dot"></span> Playing…';
+    const progress = tabBody.querySelector('#voiceProgress');
+    const fill = tabBody.querySelector('#voiceProgressFill');
+    const label = tabBody.querySelector('#voiceProgressText');
+    const stopProgress = onPiperProgress(p => {
+      if (probe.provider !== 'piper' || p.voiceId !== probe.piperVoice) return;
+      const active = p.phase === 'downloading' || p.phase === 'preparing' || p.phase === 'generating';
+      if (progress) progress.hidden = !active;
+      if (!active) return;
+      const pct = p.phase === 'downloading' ? p.percent : 100;
+      if (fill) fill.style.width = `${pct}%`;
+      const text = piperProgressLabel(p);
+      if (label) label.textContent = text;
+      btn.innerHTML = `<span class="busy-dot"></span> ${text}`;
+    });
     try {
       await previewSpeech(probe);
     } catch (err) {
       toast(err.message || 'Could not play the sample.', 'err');
     } finally {
+      stopProgress();
+      if (progress) progress.hidden = true;
       btn.disabled = false;
       btn.innerHTML = old;
     }

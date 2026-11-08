@@ -8,7 +8,7 @@ import {
 import { buildReflowable, buildComicBook, isComicFormat } from './renderers.js';
 import { PdfView } from './pdfview.js';
 import { ComicView } from './comicview.js';
-import { SpeechEngine, describeVoice } from './tts.js';
+import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel } from './tts.js';
 import {
   toast, modal, confirmDialog, contextMenu, closeAllModals, shortcutsModal,
   formatLabel, isModalOpen,
@@ -199,6 +199,8 @@ function getRefs() {
     progressFill: $('#progressFill'),
     ttsDock: $('#ttsDock'),
     ttsEq: $('#ttsEq'),
+    ttsProgress: $('#ttsProgress'),
+    ttsProgressFill: $('#ttsProgressFill'),
     ttsVoiceLabel: $('#ttsVoiceLabel'),
     ttsPos: $('#ttsPos'),
     ttsSpeedBtn: $('#ttsSpeedBtn'),
@@ -229,6 +231,7 @@ function resetReaderUI(state) {
   refs.ttsBtn.querySelector('span').textContent = 'Listen';
   refs.ttsEq.classList.remove('is-live');
   refs.ttsPos.textContent = '—';
+  if (refs.ttsProgress) refs.ttsProgress.hidden = true;
   refs.progressFill.style.width = '0%';
   refs.footLeft.textContent = '';
   refs.footRight.textContent = '';
@@ -255,6 +258,18 @@ function wireEvents(state) {
   const onScroll = rafThrottle(() => handleScroll(state));
   refs.stage.addEventListener('scroll', onScroll, { passive: true });
   state.cleanup.push(() => refs.stage.removeEventListener('scroll', onScroll));
+
+  const stopProgress = onPiperProgress(p => {
+    const eng = state.engine;
+    if (!eng || eng.provider !== 'piper' || !refs.ttsProgress) return;
+    if (eng.state !== 'loading') { refs.ttsProgress.hidden = true; return; }
+    const active = p.phase === 'downloading' || p.phase === 'preparing' || p.phase === 'generating';
+    refs.ttsProgress.hidden = !active;
+    if (!active) return;
+    refs.ttsProgressFill.style.width = `${p.phase === 'downloading' ? p.percent : 100}%`;
+    refs.ttsPos.textContent = piperProgressLabel(p);
+  });
+  state.cleanup.push(stopProgress);
 
   const onKey = e => handleKey(state, e);
   document.addEventListener('keydown', onKey);
@@ -1074,6 +1089,7 @@ function closeTTS(state, { hideDock = true } = {}) {
 }
 
 async function toggleListen(state) {
+  state.engine?._primeAudio?.();
   if (state.mode === 'comic') {
     toast('Comic pages are images, so there’s no text to narrate.', 'info');
     return;
@@ -1221,6 +1237,7 @@ function updateTTSState(state, st) {
   }
   refs.ttsEq.classList.toggle('is-live', st === 'playing');
   if (st === 'playing') refs.ttsEq.classList.add('is-live');
+  if (refs.ttsProgress && st !== 'loading') refs.ttsProgress.hidden = true;
   if (st === 'loading') {
     const e = state.engine;
     refs.ttsPos.textContent = e?.total && (e.index || 0) > 0
@@ -1276,6 +1293,7 @@ async function advancePdfTTS(state) {
 
 function handleDockAction(state, action) {
   if (action === 'toggle') {
+    state.engine?._primeAudio?.();
     const st = state.engine.state;
     if (st === 'playing' || st === 'loading') state.engine.pause();
     else state.engine.play();

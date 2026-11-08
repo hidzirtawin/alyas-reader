@@ -96,6 +96,47 @@ export function piperVoiceById(id) {
   return list.find(v => v.id === id) || list[0];
 }
 
+/* ── Piper progress ───────────────────────────────────────────────── */
+/* Phases: idle | checking | downloading | preparing | generating | ready */
+let piperProgress = {
+  phase: 'idle', voiceId: '', voiceName: '', loaded: 0, total: 0, percent: 0, cached: false,
+};
+const piperProgressListeners = new Set();
+
+export function getPiperProgress() {
+  return piperProgress;
+}
+
+export function onPiperProgress(fn) {
+  if (typeof fn !== 'function') return () => {};
+  piperProgressListeners.add(fn);
+  try { fn(piperProgress); } catch {}
+  return () => piperProgressListeners.delete(fn);
+}
+
+function emitPiperProgress(patch = {}) {
+  piperProgress = { ...piperProgress, ...patch };
+  for (const fn of piperProgressListeners) {
+    try { fn(piperProgress); } catch {}
+  }
+  try {
+    window.dispatchEvent(new CustomEvent('lumen:piperprogress', { detail: piperProgress }));
+  } catch {}
+}
+
+export function piperProgressLabel(p = piperProgress) {
+  if (p.phase === 'downloading') {
+    const pct = p.total ? Math.min(99, Math.round((p.loaded / p.total) * 100)) : 0;
+    if (!pct) return 'Downloading voice…';
+    const mb = n => `${Math.round(n / 1048576)} MB`;
+    return p.total ? `Downloading voice · ${pct}% (${mb(p.loaded)} / ${mb(p.total)})` : `Downloading voice · ${pct}%`;
+  }
+  if (p.phase === 'preparing') return 'Preparing voice…';
+  if (p.phase === 'generating') return 'Generating speech…';
+  if (p.phase === 'ready') return 'Voice ready';
+  return '';
+}
+
 export function piperSpeakerName(voice, speaker = 0) {
   if (!voice || voice.num_speakers <= 1) return '';
   const entry = Object.entries(voice.speaker_id_map || {}).find(([, id]) => Number(id) === Number(speaker));
@@ -168,6 +209,36 @@ async function putCachedVoice(id, config, blob) {
   } catch {}
 }
 
+async function fetchModelWithProgress(url, expectedBytes, onProgress) {
+  const res = await fetch(url, { cache: 'force-cache' });
+  if (!res.ok) throw new Error('The Piper voice model could not be downloaded. Check your connection and try again.');
+  const headerTotal = Number(res.headers.get('content-length')) || 0;
+  const total = expectedBytes || headerTotal || 0;
+  if (!res.body?.getReader) {
+    const blob = await res.blob();
+    onProgress(blob.size, blob.size || total);
+    return blob;
+  }
+  const reader = res.body.getReader();
+  const chunks = [];
+  let loaded = 0;
+  let lastTick = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.length;
+    const now = performance.now();
+    if (now - lastTick > 90) {
+      lastTick = now;
+      onProgress(loaded, total);
+    }
+  }
+  onProgress(loaded, total || loaded);
+  res.body.cancel?.().catch?.(() => {});
+  return new Blob(chunks, { type: 'application/octet-stream' });
+}
+
 class PiperVoiceProvider {
   constructor() {
     this.memory = new Map();
@@ -178,7 +249,14 @@ class PiperVoiceProvider {
     const voice = piperVoiceById(id);
     if (!voice || voice.id !== id) throw new Error('That Piper voice is not available.');
     const cacheKey = voice.modelUrl;
-    if (this.memory.has(cacheKey)) return this.memory.get(cacheKey);
+    const total = voice.size_bytes || 0;
+    emitPiperProgress({
+      phase: 'checking', voiceId: id, voiceName: voice.name, loaded: 0, total, percent: 0, cached: false,
+    });
+    if (this.memory.has(cacheKey)) {
+      emitPiperProgress({ phase: 'preparing', cached: true, percent: 100 });
+      return this.memory.get(cacheKey);
+    }
 
     const cached = await getCachedVoice(cacheKey);
     if (cached?.blob && cached?.config) {
@@ -186,20 +264,26 @@ class PiperVoiceProvider {
       this.urls.push(url);
       const data = [cached.config, url];
       this.memory.set(cacheKey, data);
+      emitPiperProgress({ phase: 'preparing', cached: true, percent: 100 });
       return data;
     }
 
-    const config = voice.configUrl;
-    const model = voice.modelUrl;
-    const [configRes, modelRes] = await Promise.all([
-      fetch(config, { cache: 'force-cache' }),
-      fetch(model, { cache: 'force-cache' }),
-    ]);
-    if (!configRes.ok || !modelRes.ok) {
+    emitPiperProgress({
+      phase: 'downloading', voiceId: id, voiceName: voice.name, loaded: 0, total, percent: 0, cached: false,
+    });
+    const configRes = await fetch(voice.configUrl, { cache: 'force-cache' });
+    if (!configRes.ok) {
       throw new Error('The Piper voice model could not be downloaded. Check your connection and try again.');
     }
     const configData = await configRes.json();
-    const blob = await modelRes.blob();
+    const blob = await fetchModelWithProgress(voice.modelUrl, total, (loaded, size) => {
+      emitPiperProgress({
+        loaded,
+        total: size || total,
+        percent: size ? Math.min(99, Math.round((loaded / size) * 100)) : 0,
+      });
+    });
+    emitPiperProgress({ phase: 'preparing', percent: 100 });
     await putCachedVoice(cacheKey, configData, blob);
     const url = URL.createObjectURL(blob);
     this.urls.push(url);
@@ -221,6 +305,7 @@ let piperEngine = null;
 async function getPiper() {
   if (piperPromise) return piperPromise;
   piperPromise = (async () => {
+    emitPiperProgress({ phase: 'preparing', percent: 100 });
     await loadPiperCatalog();
     const mod = await import('../vendor/piper/piper-tts-web.js');
     const base = new URL('../vendor/piper/', import.meta.url).href;
@@ -246,13 +331,50 @@ async function getPiper() {
   return piperPromise;
 }
 
+let piperBusy = 0;
+
 export async function piperGenerate(text, voiceId, speaker = null) {
   await loadPiperCatalog();
-  const { engine } = await getPiper();
   const voice = piperVoiceById(voiceId);
-  const sp = speaker == null ? (getPrefs().tts.piperSpeaker || 0) : speaker;
-  const result = await engine.generate(text, voice.id, Number(sp) || 0);
-  return result.file; // WAV Blob
+  piperBusy++;
+  try {
+    const { engine } = await getPiper();
+    const sp = speaker == null ? (getPrefs().tts.piperSpeaker || 0) : speaker;
+    emitPiperProgress({ phase: 'generating', voiceId: voice.id, voiceName: voice.name, percent: 100 });
+    const result = await engine.generate(text, voice.id, Number(sp) || 0);
+    return result.file; // WAV Blob
+  } finally {
+    piperBusy = Math.max(0, piperBusy - 1);
+    if (!piperBusy) {
+      emitPiperProgress({ phase: 'ready' });
+      setTimeout(() => {
+        if (!piperBusy && piperProgress.phase === 'ready') {
+          emitPiperProgress({ phase: 'idle', loaded: 0, total: 0, percent: 0 });
+        }
+      }, 1200);
+    }
+  }
+}
+
+/* A tiny silent WAV, played on the user's tap to unlock audio on iOS.
+   The same <audio> element is reused, so later async playback is allowed. */
+let silentWavUrl = null;
+function silentAudioSrc() {
+  if (silentWavUrl) return silentWavUrl;
+  const rate = 8000;
+  const samples = 480;
+  const buffer = new ArrayBuffer(44 + samples * 2);
+  const view = new DataView(buffer);
+  const write = (offset, text) => {
+    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+  };
+  write(0, 'RIFF'); view.setUint32(4, 36 + samples * 2, true); write(8, 'WAVE'); write(12, 'fmt ');
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  write(36, 'data'); view.setUint32(40, samples * 2, true);
+  silentWavUrl = URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
+  return silentWavUrl;
 }
 
 /* ═══════════════════════════════════════════════════════════════════ */
@@ -271,6 +393,8 @@ export class SpeechEngine {
     this._chunkIndex = 0;
     this._token = 0;
     this._audio = null;
+    this._audioEl = null;
+    this._primed = false;
     this._audioUrl = null;
     this._cache = new Map();
     this._inFlight = new Map();
@@ -321,7 +445,30 @@ export class SpeechEngine {
       return;
     }
     if (this.state === 'playing' || this.state === 'loading') return;
+    this._primeAudio();
     this._startSentence(this.index);
+  }
+
+  // Called synchronously from a tap so iOS allows the later async playback.
+  _primeAudio() {
+    if (this.provider !== 'piper') return;
+    if (!this._audioEl) this._audioEl = new Audio();
+    if (this._primed) return;
+    const audio = this._audioEl;
+    this._primed = true;
+    try {
+      const silent = silentAudioSrc();
+      audio.src = silent;
+      audio.volume = 0.0001;
+      const p = audio.play();
+      p?.then?.(() => {
+        if (audio.src === silent) {
+          try { audio.pause(); audio.currentTime = 0; } catch {}
+        }
+      }).catch?.(() => { this._primed = false; });
+    } catch {
+      this._primed = false;
+    }
   }
 
   pause() {
@@ -457,7 +604,8 @@ export class SpeechEngine {
     if (token !== this._token) return;
 
     const prefs = getPrefs().tts;
-    const audio = new Audio(entry.url);
+    const audio = this._audioEl || new Audio();
+    audio.src = entry.url;
     this._audio = audio;
     this._audioUrl = entry.url;
     audio.volume = clampNum(prefs.volume ?? 0.9, 0, 1);
@@ -655,14 +803,24 @@ export async function previewSpeech(tts, text = 'This is how I’ll read your bo
     return;
   }
 
+  // Unlock this audio element inside the tap, before the long generation.
+  const audio = new Audio(silentAudioSrc());
+  previewAudio = audio;
+  audio.volume = 0.0001;
+  const unlock = audio.play().catch(() => {});
+
   const blob = await piperGenerate(text, tts.piperVoice, tts.piperSpeaker);
+  if (previewAudio !== audio) return; // the preview was cancelled meanwhile
+  try { await unlock; } catch {}
+  try { audio.pause(); audio.currentTime = 0; } catch {}
+
   previewUrl = URL.createObjectURL(blob);
-  previewAudio = new Audio(previewUrl);
-  previewAudio.volume = clampNum(tts.volume ?? 0.9, 0, 1);
-  previewAudio.playbackRate = clampNum(tts.rate, 0.5, 2);
-  previewAudio.preservesPitch = true;
-  previewAudio.onended = () => { clearPreviewAudio(); };
-  await previewAudio.play();
+  audio.src = previewUrl;
+  audio.volume = clampNum(tts.volume ?? 0.9, 0, 1);
+  audio.playbackRate = clampNum(tts.rate, 0.5, 2);
+  audio.preservesPitch = true;
+  audio.onended = () => { clearPreviewAudio(); };
+  await audio.play();
 }
 
 function clearPreviewAudio() {

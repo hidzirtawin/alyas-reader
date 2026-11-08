@@ -114,6 +114,7 @@
           <svg><use href="#i-search"/></svg>
           <input id="librarySearch" type="search" placeholder="Search library" autocomplete="off" spellcheck="false" aria-label="Search library">
         </label>
+        <button class="btn btn-quiet" id="freeBooksBtn" title="Find free books"><svg><use href="#i-book"/></svg><span>Free books</span></button>
         <button class="btn btn-primary" id="addBookBtn"><svg><use href="#i-plus"/></svg><span>Add book</span></button>
       </div>
     </header>
@@ -159,6 +160,7 @@
   </div>
 
   <div class="tts-dock" id="ttsDock" hidden>
+    <div class="tts-progress" id="ttsProgress" hidden><i id="ttsProgressFill"></i></div>
     <div class="tts-eq" id="ttsEq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
     <button class="icon-btn" data-tts="prev" title="Previous sentence" aria-label="Previous sentence"><svg><use href="#i-prev"/></svg></button>
     <button class="tts-play" data-tts="toggle" title="Play / pause" aria-label="Play or pause"><svg><use href="#i-play"/></svg></button>

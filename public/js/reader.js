@@ -1412,7 +1412,7 @@ function updateTTSState(state, st) {
   const btn = refs.ttsDock.querySelector('.tts-play');
   const playing = st === 'playing' || st === 'loading';
   if (btn) {
-    btn.innerHTML = icon(playing ? 'pause' : 'ear');
+    btn.innerHTML = icon(playing ? 'pause' : 'loudhailer');
     btn.classList.toggle('is-playing', st === 'playing');
     btn.setAttribute('aria-label', playing ? 'Pause narration' : 'Play narration');
   }

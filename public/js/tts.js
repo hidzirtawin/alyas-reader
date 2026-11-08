@@ -171,6 +171,32 @@ export const PIPER_PRESETS = [
     voiceId: 'en_US-libritts_r-medium', speaker: 0, rate: 0.96,
     desc: 'Trained on LibriVox audiobooks · 2,306 speakers.',
   },
+  /* Cinema-inspired originals. Named by genre, never by a real performer. */
+  {
+    id: 'cinema-noir', name: 'Cinema · Noir', group: 'cinema',
+    voiceId: 'en_US-joe-medium', speaker: 0, rate: 0.9,
+    desc: 'Low, world-weary detective narration.',
+  },
+  {
+    id: 'cinema-leading-lady', name: 'Cinema · Leading lady', group: 'cinema',
+    voiceId: 'en_US-kristin-medium', speaker: 0, rate: 0.95,
+    desc: 'Bright, cinematic American female lead.',
+  },
+  {
+    id: 'cinema-leading-man', name: 'Cinema · Leading man', group: 'cinema',
+    voiceId: 'en_US-mike-medium', speaker: 0, rate: 0.95,
+    desc: 'Confident, warm American male lead.',
+  },
+  {
+    id: 'cinema-epic', name: 'Cinema · Epic', group: 'cinema',
+    voiceId: 'en_US-bryce-medium', speaker: 0, rate: 0.88,
+    desc: 'Slow, widescreen trailer narration.',
+  },
+  {
+    id: 'cinema-stage', name: 'Cinema · Stage', group: 'cinema',
+    voiceId: 'en_GB-northern_english_male-medium', speaker: 0, rate: 0.9,
+    desc: 'Theatrical northern British delivery.',
+  },
 ];
 
 export function piperSpeakerName(voice, speaker = 0) {

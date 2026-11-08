@@ -1206,6 +1206,10 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
   letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3);
 }
 .presets-head .dim { letter-spacing: 0; text-transform: none; font-weight: 400; }
+.preset-subhead {
+  margin: 8px 0 5px; font-size: 10px; font-weight: 600;
+  letter-spacing: .04em; color: var(--ink-2);
+}
 .preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .preset {
   text-align: left; padding: 9px 11px; border-radius: 10px;

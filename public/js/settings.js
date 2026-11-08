@@ -463,10 +463,10 @@ export async function openVoiceModal({ onSaved } = {}) {
           ['audiobook', 'Audiobook-inspired'],
           ['cinema', 'Cinema-inspired originals'],
           ['character', 'Character archetypes'],
+          ['accent', 'Regional accents'],
         ].map(([group, title]) => {
           const items = PIPER_PRESETS.filter(p => (p.group || 'audiobook') === group);
-          return `<div class="preset-subhead">${title}</div>
-            <div class="preset-grid">
+          const cards = `<div class="preset-grid">
               ${items.map(p => {
                 const active = p.voiceId === draft.piperVoice
                   && Number(p.speaker || 0) === Number(draft.piperSpeaker || 0)
@@ -477,8 +477,15 @@ export async function openVoiceModal({ onSaved } = {}) {
                 </button>`;
               }).join('')}
             </div>`;
+          if (group === 'accent') {
+            return `<details class="preset-details" open><summary>${title} <span>${items.length} British, African, Asian and Oceania voices · VCTK + L2-ARCTIC</span></summary>
+              <p class="preset-source">Real accent characteristics from the open VCTK and L2-ARCTIC research corpora. These are original open voices, not celebrity impersonations.</p>
+              ${cards}
+            </details>`;
+          }
+          return `<div class="preset-subhead">${title}</div>${cards}`;
         }).join('')}
-        <p class="preset-note">Celebrity, Audible, Libby and OverDrive narrators are real people or licensed voices. These presets are original open Piper voices — no real person is cloned or impersonated. Character archetypes are generic and not endorsed by any performer. <strong>LibriVox-style</strong> uses LibriTTS, trained on volunteer LibriVox recordings.</p>
+        <p class="preset-note">Celebrity, Audible, Libby and OverDrive narrators are real people or licensed voices. These presets are original open Piper voices — no real person is cloned or impersonated. Regional accents come from the open <strong>VCTK</strong> and <strong>L2-ARCTIC</strong> research corpora; they are real accent characteristics, not impersonations. <strong>LibriVox-style</strong> uses LibriTTS, trained on volunteer LibriVox recordings.</p>
       </div>
       <div class="field" style="margin-bottom:10px;margin-top:12px">
         <label>Piper voices <span class="dim" style="font-weight:400">· ${all.length} voices · free · offline</span></label>
@@ -565,9 +572,9 @@ export async function openVoiceModal({ onSaved } = {}) {
       const q = query.trim().toLowerCase();
       let matches = q ? list.filter(([name, id]) => `${label(name)} ${id}`.toLowerCase().includes(q)) : list;
       const current = list.find(([, id]) => Number(id) === selectedId);
-      if (current && !matches.some(([, id]) => Number(id) === selectedId)) matches = [current, ...matches];
       const limit = q ? 80 : (many ? 60 : matches.length);
       const shown = matches.slice(0, limit);
+      if (current && !shown.some(([, id]) => Number(id) === selectedId)) shown.unshift(current);
       select.innerHTML = shown.map(([name, id]) => `<option value="${Number(id)}"${Number(id) === selectedId ? ' selected' : ''}>${esc(label(name))}</option>`).join('');
       if (count) {
         count.textContent = q

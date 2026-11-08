@@ -54,6 +54,7 @@ Alya’s Reader runs [Piper](https://github.com/rhasspy/piper) (MIT) entirely in
 - **Audiobook-style presets** for warm, classic, British and studio narration, plus a **LibriVox-style** LibriTTS voice trained on volunteer audiobook recordings
 - **Cinema-style originals** — noir, leading lady, leading man, epic trailer and stage presets, named by genre rather than by real performers
 - **Character archetypes** — suave spy, wise elder, West Coast cool and news anchor, written as generic styles rather than impersonations
+- **Regional accents from open research corpora** — VCTK British, Scottish, Northern Irish, Irish, Welsh, South African, Indian, Australian and New Zealand English; L2-ARCTIC Mandarin-, Hindi-, Vietnamese- and Korean-accented English
 
 The default voice is **LibriVox-style** (LibriTTS, 2,306 speakers). It starts downloading in the background the first time you open the app, with a progress bar, and is cached for offline use. The first time you choose any other voice, its model is downloaded from Hugging Face and stored in the browser. Models range from about 20 MB to 115 MB; after that the voice works offline. No account or API key is involved, and your book text never leaves your device.
 
@@ -165,6 +166,8 @@ public/
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) (MIT) — browser/WASM wrapper and worker runtime
 - [Piper voice models](https://huggingface.co/rhasspy/piper-voices) (MIT) — official voice catalog
 - [Australian LibriVox Piper voice](https://huggingface.co/DataCraftsmanAustralia/piper-en_AU-librivox-medium) by DataCraftsmanAustralia (CC-BY-4.0)
+- [VCTK Corpus](https://datashare.ed.ac.uk/handle/10283/2950) (CC BY 4.0) — regional English accent speakers used by the VCTK Piper voice
+- [L2-ARCTIC](https://psi.engr.tamu.edu/l2-arctic-corpus/) (CC BY-NC 4.0) — non-native English accent speakers used by the L2-ARCTIC Piper voice
 - [Webster’s English Dictionary](https://github.com/matthewreagan/WebstersEnglishDictionary) — public-domain Webster’s Unabridged 1913 data
 - Typefaces: Literata, Merriweather, Lora, EB Garamond, Libre Baskerville, Source Serif 4, Atkinson Hyperlegible, Lexend, Inter, OpenDyslexic and Fraunces (SIL Open Font License), served locally from Fontsource builds.
 

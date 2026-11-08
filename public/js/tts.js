@@ -218,6 +218,24 @@ export const PIPER_PRESETS = [
     voiceId: 'en_US-ljspeech-high', speaker: 0, rate: 1,
     desc: 'Crisp, neutral broadcast read.',
   },
+  /* Regional and L2 English accents from the open VCTK and L2-ARCTIC corpora. */
+  { id: 'accent-british-london', name: 'British · London', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 81, rate: 0.96, desc: 'London English, male speaker.' },
+  { id: 'accent-british-birmingham', name: 'British · Birmingham', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 104, rate: 0.96, desc: 'Birmingham English, male speaker.' },
+  { id: 'accent-british-manchester', name: 'British · Manchester', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 1, rate: 0.97, desc: 'Manchester English, female speaker.' },
+  { id: 'accent-british-yorkshire', name: 'British · Yorkshire', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 12, rate: 0.96, desc: 'Yorkshire English, male speaker.' },
+  { id: 'accent-scottish', name: 'Scottish · Edinburgh', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 79, rate: 0.96, desc: 'Scottish English, male speaker.' },
+  { id: 'accent-northern-irish', name: 'Northern Irish · Belfast', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 17, rate: 0.96, desc: 'Northern Irish English, female speaker.' },
+  { id: 'accent-irish', name: 'Irish · Dublin', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 97, rate: 0.96, desc: 'Irish English, male speaker.' },
+  { id: 'accent-welsh', name: 'Welsh · Cardiff', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 88, rate: 0.97, desc: 'Welsh English, female speaker.' },
+  { id: 'accent-south-african-f', name: 'South African · Cape Town', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 35, rate: 0.96, desc: 'South African English, female speaker.' },
+  { id: 'accent-south-african-m', name: 'South African · Johannesburg', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 32, rate: 0.95, desc: 'South African English, male speaker.' },
+  { id: 'accent-indian', name: 'Indian English', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 92, rate: 0.96, desc: 'Indian English, male speaker.' },
+  { id: 'accent-australian', name: 'Australian · Sydney', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 71, rate: 0.96, desc: 'Australian English, male speaker.' },
+  { id: 'accent-new-zealand', name: 'New Zealand English', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 42, rate: 0.96, desc: 'New Zealand English, female speaker.' },
+  { id: 'accent-mandarin', name: 'English · Mandarin accent', group: 'accent', tag: 'L2-ARCTIC', voiceId: 'en_US-l2arctic-medium', speaker: 0, rate: 0.95, desc: 'English with a Mandarin Chinese accent, male.' },
+  { id: 'accent-hindi', name: 'English · Hindi accent', group: 'accent', tag: 'L2-ARCTIC', voiceId: 'en_US-l2arctic-medium', speaker: 2, rate: 0.95, desc: 'English with a Hindi accent, female.' },
+  { id: 'accent-vietnamese', name: 'English · Vietnamese accent', group: 'accent', tag: 'L2-ARCTIC', voiceId: 'en_US-l2arctic-medium', speaker: 1, rate: 0.95, desc: 'English with a Vietnamese accent, female.' },
+  { id: 'accent-korean', name: 'English · Korean accent', group: 'accent', tag: 'L2-ARCTIC', voiceId: 'en_US-l2arctic-medium', speaker: 11, rate: 0.95, desc: 'English with a Korean accent, female.' },
 ];
 
 export function piperVoiceForLanguage(language = '') {

@@ -856,7 +856,21 @@ export class SpeechEngine {
   /* ── Piper audio fetch / cache ──────────────────────────────── */
   _cacheKey(text) {
     const tts = getPrefs().tts;
-    return `${tts.provider}|${tts.provider === 'piper' ? tts.piperVoice : tts.voiceURI}|${tts.rate}|${text}`;
+    const voice = this.voice?.voiceId || (tts.provider === 'piper' ? tts.piperVoice : tts.voiceURI);
+    return `${tts.provider}|${voice}|${tts.rate}|${text}`;
+  }
+
+  /* Generate upcoming text without changing the current sentence. */
+  prefetchTexts(texts = []) {
+    if (this.provider !== 'piper') return;
+    for (const text of texts.slice(0, 3)) {
+      const clean = cleanForSpeech(text);
+      if (!clean) continue;
+      const chunk = splitLongText(clean, 800)[0];
+      const key = this._cacheKey(chunk);
+      if (this._cache.has(key) || this._inFlight.has(key)) continue;
+      this._getAudio(chunk).catch(() => {});
+    }
   }
 
   async _getAudio(text) {

@@ -517,11 +517,6 @@ function renderChapter(state, index, opts = {}) {
     }, { once: true });
   });
 
-  if (opts.autoplayTTS) {
-    // Start immediately: timers can be frozen when a phone screen locks,
-    // which used to leave narration stopped at the end of a chapter.
-    if (S === state && state.renderToken === token) startTTS(state, { autoplay: true });
-  }
 }
 
 /* ── text maps / sentences ───────────────────────────────────────── */
@@ -1208,14 +1203,10 @@ async function startTTS(state, { autoplay = true, start = null } = {}) {
     return;
   }
   if (state.mode === 'pdf') {
-    await startPdfTTS(state, { autoplay, page: state.page || 1, start });
-    return;
+    return startPdfTTS(state, { autoplay, page: state.page || 1, start });
   }
   const sentences = buildChapterSentences(state);
-  if (!sentences.length) {
-    toast('There’s no readable text in this chapter.', 'err');
-    return;
-  }
+  if (!sentences.length) return false;
   let index = start;
   if (index == null) index = firstVisibleSentence(state, sentences);
   openDock(state);
@@ -1223,6 +1214,7 @@ async function startTTS(state, { autoplay = true, start = null } = {}) {
   state.engine.load(sentences, { autoplay, start: clamp(index || 0, 0, sentences.length - 1) });
   updateMediaSession(state);
   if (autoplay) state.engine.play();
+  return true;
 }
 
 async function startPdfTTS(state, { autoplay = true, page = null, start = null } = {}) {
@@ -1235,10 +1227,7 @@ async function startPdfTTS(state, { autoplay = true, page = null, start = null }
     tries++;
     sentences = await state.pdfView.getPageSentences(p);
   }
-  if (!sentences.length) {
-    toast('This page has no selectable text to read aloud.', 'err');
-    return;
-  }
+  if (!sentences.length) return false;
   if (p !== state.page) {
     state.ttsAdvancing = true;
     state.pdfView.scrollToPage(p, { smooth: false });
@@ -1250,6 +1239,7 @@ async function startPdfTTS(state, { autoplay = true, page = null, start = null }
   state.engine.load(sentences, { autoplay, start: clamp(start || 0, 0, sentences.length - 1) });
   updateMediaSession(state);
   if (autoplay) state.engine.play();
+  return true;
 }
 
 function firstVisibleSentence(state, sentences) {
@@ -1264,12 +1254,44 @@ function firstVisibleSentence(state, sentences) {
 
 function onTTSSentence(state, sentence, index) {
   refs.ttsPos.textContent = `${index + 1} / ${state.engine.total}`;
+  prefetchNextChapter(state, index);
   if (!getPrefs().tts.highlight) return;
   if (state.mode === 'pdf') {
     state.pdfView?.showHighlight(sentence);
     return;
   }
   showTTSHighlight(state, sentence);
+}
+
+function chapterHasBody(chapter) {
+  if (!chapter?.html) return false;
+  const holder = document.createElement('div');
+  holder.innerHTML = chapter.html;
+  holder.querySelectorAll('h1,h2,h3,h4,h5,h6,figcaption').forEach(el => el.remove());
+  return normalizedText(holder.textContent || '').replace(/\s+/g, ' ').trim().length >= 20;
+}
+
+function sentencesFromChapter(chapter) {
+  if (!chapter?.html) return [];
+  const holder = document.createElement('div');
+  holder.className = 'reading';
+  holder.innerHTML = chapter.html;
+  const map = buildTextMap(holder);
+  return detectSentenceSegments(map.text)
+    .map(seg => seg.text.trim())
+    .filter(text => text.length >= 2 && /[\p{L}\p{N}]/u.test(text));
+}
+
+function prefetchNextChapter(state, index) {
+  if (state.mode !== 'reflow' || !state.book?.chapters?.length) return;
+  if (index < (state.engine?.total || 0) - 2) return;
+  const nextIndex = state.chapterIndex + 1;
+  if (nextIndex >= state.book.chapters.length || state.prefetchedChapter === nextIndex) return;
+  if (!chapterHasBody(state.book.chapters[nextIndex])) return;
+  const texts = sentencesFromChapter(state.book.chapters[nextIndex]).slice(0, 3);
+  if (!texts.length) return;
+  state.prefetchedChapter = nextIndex;
+  state.engine?.prefetchTexts(texts);
 }
 
 function showTTSHighlight(state, sentence) {
@@ -1345,16 +1367,30 @@ function updateTTSState(state, st) {
 function onTTSEnd(state) {
   const tts = getPrefs().tts;
   updateTTSState(state, 'idle');
+  state.engine?._requestWakeLock?.();
   if (state.mode === 'pdf') {
     if (tts.autoAdvance && state.page < state.numPages) advancePdfTTS(state);
     else if (state.page >= state.numPages) toast('You’ve reached the end of the book.', 'ok');
     return;
   }
   if (tts.autoAdvance && state.chapterIndex < state.book.chapters.length - 1) {
-    renderChapter(state, state.chapterIndex + 1, { ratio: 0, keepDock: true, autoplayTTS: true });
+    advanceReflowTTS(state).catch(err => {
+      console.error('Could not continue narration', err);
+      toast('Narration could not continue to the next chapter.', 'err');
+    });
   } else if (state.chapterIndex >= state.book.chapters.length - 1) {
     toast('You’ve reached the end of the book.', 'ok');
   }
+}
+
+async function advanceReflowTTS(state) {
+  for (let i = state.chapterIndex + 1; i < state.book.chapters.length; i++) {
+    if (!chapterHasBody(state.book.chapters[i])) continue;
+    renderChapter(state, i, { ratio: 0, keepDock: true });
+    const started = await startTTS(state, { autoplay: true });
+    if (started) return;
+  }
+  toast('You’ve reached the end of the book.', 'ok');
 }
 
 async function advancePdfTTS(state) {

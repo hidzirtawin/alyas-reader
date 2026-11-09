@@ -513,6 +513,12 @@ class PiperVoiceProvider {
 let piperPromise = null;
 let piperEngine = null;
 
+function resetPiperEngine() {
+  try { piperEngine?.destroy?.(); } catch {}
+  piperEngine = null;
+  piperPromise = null;
+}
+
 async function getPiper() {
   if (piperPromise) return piperPromise;
   piperPromise = (async () => {
@@ -949,6 +955,7 @@ export class SpeechEngine {
   _skipUnreadable(err) {
     this._errorStreak = (this._errorStreak || 0) + 1;
     console.warn('Skipping an unreadable sentence', err);
+    if (this._errorStreak === 2) resetPiperEngine();
     if (this._errorStreak <= 3) {
       this._advanceSentence();
       return;

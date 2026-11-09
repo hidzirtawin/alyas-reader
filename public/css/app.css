@@ -834,6 +834,13 @@ textarea.input { height: auto; min-height: 84px; padding: 11px 13px; resize: ver
 
 .reader-stage { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 52px 24px 130px; scroll-behavior: auto; overscroll-behavior: contain; }
 .reader-stage:focus { outline: none; }
+.continuous-book { display: flex; flex-direction: column; }
+.continuous-book .chapter-section { position: relative; scroll-margin-top: 80px; }
+.continuous-book .chapter-section + .chapter-section {
+  margin-top: 48px; padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.continuous-book .chapter-nav { display: none; }
 .reading-wrap { width: 100%; max-width: var(--reader-measure); margin: 0 auto; }
 .chapter-head { margin: 0 0 34px; }
 .chapter-head .ch-eyebrow { display: flex; align-items: center; gap: 9px; font-family: var(--font-ui); font-size: 9.5px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--reader-ink-2); opacity: .7; }

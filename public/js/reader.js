@@ -61,12 +61,19 @@ export function restoreReadingSession(app) {
   setTimeout(() => { app.openBook(saved.bookId, target); }, 250);
   if (saved.playing) {
     setTimeout(() => {
-      toast('Narration was interrupted. Tap Resume to continue where you left off.', 'info', {
-        actionLabel: 'Resume',
-        duration: 20000,
-        onAction: () => window.lumen?.resumeTTS?.(),
-      });
-    }, 1200);
+      if (!window.lumen?.reader) return;
+      try { window.lumen.resumeTTS?.(); } catch {}
+    }, 1600);
+    setTimeout(() => {
+      const eng = window.lumen?.reader?.engine;
+      if (eng && eng.state !== 'playing' && eng.state !== 'loading') {
+        toast('Narration was interrupted. Tap Resume to continue where you left off.', 'info', {
+          actionLabel: 'Resume',
+          duration: 20000,
+          onAction: () => window.lumen?.resumeTTS?.(),
+        });
+      }
+    }, 5200);
   }
   return true;
 }
@@ -111,6 +118,8 @@ export async function openReader(app, bookId, target = {}) {
     ratio: 0,
     percent: 0,
     sentences: null,
+    continuous: false,
+    continuousBook: null,
     bookmarks: [],
     highlights: [],
     engine: null,
@@ -465,6 +474,12 @@ async function openReflowBook(state) {
   const ratio = state.target.ratio ?? progress?.ratio ?? 0;
   state.chapterIndex = targetChapter;
 
+  state.continuous = !!getPrefs().reader.continuous;
+  if (state.continuous) {
+    refs.stage.innerHTML = '<div class="continuous-book" id="continuousBook"></div>';
+    state.continuousBook = refs.stage.querySelector('#continuousBook');
+  }
+
   renderChapter(state, targetChapter, {
     ratio: state.target.ratio != null ? state.target.ratio : ratio,
     anchor: state.target.anchor,
@@ -489,6 +504,106 @@ function defaultStartChapter(book) {
   if (idx < 0) idx = book.chapters.findIndex((c, i) => !isFront(c, i) && (c.words || 0) > 0);
   if (idx < 0) idx = book.chapters.findIndex(c => (c.words || 0) > 0);
   return Math.max(0, idx);
+}
+
+function ensureContinuousSection(state, index) {
+  const container = state.continuousBook;
+  if (!container || !state.book) return null;
+  const existing = container.querySelector(`.chapter-section[data-chapter-index="${index}"]`);
+  if (existing) return existing;
+  const chapter = state.book.chapters[index];
+  if (!chapter) return null;
+  const section = document.createElement('section');
+  section.className = 'chapter-section';
+  section.dataset.chapterIndex = String(index);
+  section.innerHTML = chapterMarkup(state, chapter, index);
+  const after = Array.from(container.children).find(el => Number(el.dataset.chapterIndex) > index);
+  if (after) container.insertBefore(section, after);
+  else container.appendChild(section);
+  return section;
+}
+
+function activateContinuousChapter(state, index, opts = {}) {
+  if (!state.book) return;
+  const n = state.book.chapters.length;
+  index = clamp(index, 0, n - 1);
+  const chapter = state.book.chapters[index];
+  if (!chapter) return;
+  if (!opts.keepDock) closeTTS(state);
+
+  const section = ensureContinuousSection(state, index);
+  if (!section) return;
+  ensureContinuousSection(state, index + 1);
+
+  state.chapterIndex = index;
+  state.chapter = chapter;
+  state.sentences = null;
+  state.prefetchedChapter = null;
+  state.wordsBefore = state.book.chapters.slice(0, index).reduce((sum, c) => sum + (c.words || 0), 0);
+  state.ratio = opts.ratio || 0;
+  state.renderToken++;
+  state.article = section.querySelector('.reading');
+  if (state.article) state.article.lang = baseLanguage(state.book?.language || 'en') || 'en';
+  refs.readerChapterTitle.textContent = chapter.label || `Chapter ${index + 1}`;
+  hideSelection(state);
+
+  if (section.dataset.hlApplied !== '1') {
+    applyStoredHighlights(state);
+    section.dataset.hlApplied = '1';
+  }
+  updateTocActive(state);
+
+  const stage = refs.stage;
+  const stageRect = stage.getBoundingClientRect();
+  const secRect = section.getBoundingClientRect();
+  const base = stage.scrollTop + (secRect.top - stageRect.top);
+  const extra = (opts.ratio || 0) * Math.max(0, section.offsetHeight - stage.clientHeight);
+  state.programmatic = true;
+  stage.scrollTo({ top: Math.max(0, base + extra), behavior: 'auto' });
+  setTimeout(() => { state.programmatic = false; }, 100);
+
+  const restored = () => {
+    if (state.destroyed) return;
+    if (opts.anchor) scrollToAnchor(state, opts.anchor);
+    else if (opts.highlightId) scrollToMark(state, opts.highlightId);
+  };
+  if (opts.anchor || opts.highlightId) setTimeout(restored, 60);
+
+  updateReflowProgress(state);
+  updateBookmarkButton(state);
+  if (!opts.keepDock) state.queueSave?.();
+}
+
+function updateContinuousActiveFromScroll(state) {
+  const container = state.continuousBook;
+  if (!container || state.engine?.state !== 'idle') return;
+  const marker = refs.stage.scrollTop + 80;
+  const base = container.offsetTop || 0;
+  let active = null;
+  for (const section of container.children) {
+    if (section.offsetTop - base <= marker) active = section;
+    else break;
+  }
+  if (refs.stage.scrollTop + refs.stage.clientHeight >= refs.stage.scrollHeight - 2) {
+    active = container.lastElementChild || active;
+  }
+  if (!active) active = container.firstElementChild;
+  if (!active) return;
+  const index = Number(active.dataset.chapterIndex);
+  if (index === state.chapterIndex) return;
+  state.chapterIndex = index;
+  state.chapter = state.book.chapters[index] || null;
+  state.article = active.querySelector('.reading');
+  state.wordsBefore = state.book.chapters.slice(0, index).reduce((sum, c) => sum + (c.words || 0), 0);
+  state.sentences = null;
+  state.prefetchedChapter = null;
+  if (state.chapter) refs.readerChapterTitle.textContent = state.chapter.label || `Chapter ${index + 1}`;
+  if (active.dataset.hlApplied !== '1') {
+    applyStoredHighlights(state);
+    active.dataset.hlApplied = '1';
+  }
+  updateTocActive(state);
+  ensureContinuousSection(state, index + 1);
 }
 
 function chapterMarkup(state, chapter, index) {  const book = state.book;
@@ -518,6 +633,7 @@ function chapterMarkup(state, chapter, index) {  const book = state.book;
 
 function renderChapter(state, index, opts = {}) {
   if (state.mode !== 'reflow' || !state.book) return;
+  if (state.continuous) { activateContinuousChapter(state, index, opts); return; }
   const n = state.book.chapters.length;
   index = clamp(index, 0, n - 1);
   const chapter = state.book.chapters[index];
@@ -760,6 +876,14 @@ function removeMark(state, id) {
 /* ── progress + navigation ───────────────────────────────────────── */
 function reflowRatio(state) {
   const stage = refs.stage;
+  if (state.continuous && state.continuousBook) {
+    const section = state.continuousBook.querySelector(`.chapter-section[data-chapter-index="${state.chapterIndex}"]`);
+    if (section) {
+      const secTop = stage.scrollTop + section.getBoundingClientRect().top - stage.getBoundingClientRect().top;
+      const max = Math.max(1, section.offsetHeight - stage.clientHeight);
+      return clamp((stage.scrollTop - secTop) / max, 0, 1);
+    }
+  }
   const max = stage.scrollHeight - stage.clientHeight;
   return max > 0 ? clamp(stage.scrollTop / max, 0, 1) : 0;
 }
@@ -846,6 +970,7 @@ function handleScroll(state) {
   if (!state.programmatic) state.userScrolled = true;
   if (!refs.selBar.hidden) hideSelection(state);
   if (state.mode === 'reflow') {
+    if (state.continuous) updateContinuousActiveFromScroll(state);
     updateReflowProgress(state);
     updateBookmarkButton(state);
   }
@@ -866,9 +991,18 @@ function gotoChapter(state, index, opts = {}) {
 }
 
 function scrollToRatio(state, ratio) {
-  const max = Math.max(0, refs.stage.scrollHeight - refs.stage.clientHeight);
+  let top;
+  if (state.continuous) {
+    const section = state.continuousBook?.querySelector(`.chapter-section[data-chapter-index="${state.chapterIndex}"]`);
+    if (section) {
+      const stage = refs.stage;
+      const base = stage.scrollTop + section.getBoundingClientRect().top - stage.getBoundingClientRect().top;
+      top = base + clamp(ratio, 0, 1) * Math.max(0, section.offsetHeight - stage.clientHeight);
+    }
+  }
+  if (top == null) top = Math.max(0, refs.stage.scrollHeight - refs.stage.clientHeight) * clamp(ratio, 0, 1);
   state.programmatic = true;
-  refs.stage.scrollTo({ top: max * clamp(ratio, 0, 1), behavior: 'auto' });
+  refs.stage.scrollTo({ top, behavior: 'auto' });
   setTimeout(() => { state.programmatic = false; }, 100);
 }
 
@@ -1573,7 +1707,7 @@ function updateMediaSession(state) {
     navigator.mediaSession.setActionHandler('pause', () => state.engine.pause());
     navigator.mediaSession.setActionHandler('previoustrack', () => state.engine.prev());
     navigator.mediaSession.setActionHandler('nexttrack', () => state.engine.next());
-    navigator.mediaSession.setActionHandler('stop', () => closeTTS(state));
+    navigator.mediaSession.setActionHandler('stop', () => state.engine.pause());
   } catch {}
 }
 
@@ -1972,6 +2106,7 @@ function buildTypePanel(state) {
     <div class="tp-section">
       <label class="tp-inline"><span>Justify text</span><span class="switch"><input type="checkbox" data-rt="justify" ${r.justify ? 'checked' : ''}><span class="track"></span></span></label>
       <label class="tp-inline" style="margin-top:9px"><span>Hyphenation</span><span class="switch"><input type="checkbox" data-rt="hyphens" ${r.hyphens ? 'checked' : ''}><span class="track"></span></span></label>
+      <label class="tp-inline" style="margin-top:9px"><span>Continuous chapters</span><span class="switch"><input type="checkbox" data-rt="continuous" ${r.continuous ? 'checked' : ''}><span class="track"></span></span></label>
     </div>
     <div class="tp-section">
       <div class="tp-inline"><span>Narration</span><span class="dim">${prefs.tts.enabled ? 'On' : 'Silent'}</span></div>
@@ -2045,6 +2180,11 @@ function handleTypeInput(state, e) {
 }
 
 function handleTypeChange(state, e) {
+  if (e.target.matches('[data-rt="continuous"]')) {
+    setReaderPrefs({ continuous: e.target.checked });
+    toast(e.target.checked ? 'Continuous layout on — reopen the book to apply.' : 'Continuous layout off — reopen the book to apply.', 'info');
+    return;
+  }
   if (e.target.matches('[data-tp-font-select]')) {
     setReaderPrefs({ font: e.target.value });
     buildTypePanel(state);

@@ -32,6 +32,7 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 - **Languages** — books are detected automatically (script and stop-word analysis, plus EPUB/ODT/FB2 metadata). Non-English books use a matching Piper voice when one is available, and hyphenation follows the book’s language.
 - **Dictionary** — select a word and tap **Define**, or double-click it. A public-domain Webster’s 1913 dictionary is stored offline; other languages also get a Wiktionary link.
 - **Move around** — previous/next chapter buttons sit in the reader footer, the chapter label opens contents, and a chapter dropdown jumps straight to any section. Press `G` for PDF/comic page jumps or a chapter-and-position jump.
+- **Continuous chapter scroll** — an optional layout in Settings → Reading comfort that flows chapters into one long page, appending the next chapter as you read. Narration crosses the joins without stopping.
 - **Search inside a book** — `⌘F` / `Ctrl+F` or More → Search in book. Results show chapter and context; choosing one jumps there and highlights the match.
 - **Offline & installable** — a service worker caches the app shell after the first visit, so the reader opens without a network connection and can be installed to the home screen.
 - **Voice storage manager** — see how much space downloaded voice models use, remove individual voices, or clear them all from Settings → Data.

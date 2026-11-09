@@ -41,6 +41,7 @@ const DEFAULTS = {
     indent: 0,
     letterSpacing: 0,
     wordSpacing: 0,
+    continuous: false,
   },
   tts: {
     enabled: true,

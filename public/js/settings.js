@@ -166,6 +166,11 @@ export function renderSettings(app) {
               <input type="checkbox" id="setJustify" ${r.justify ? 'checked' : ''}>
               <span class="track"></span><span class="switch-label">Justify text</span>
             </label>
+            <label class="switch" style="margin-top:10px">
+              <input type="checkbox" id="setContinuous" ${r.continuous ? 'checked' : ''}>
+              <span class="track"></span><span class="switch-label">Continuous chapter scroll</span>
+            </label>
+            <p class="hint" style="margin-top:6px">Flow chapters into one long page instead of opening them one at a time.</p>
             <label class="switch">
               <input type="checkbox" id="setHyphens" ${r.hyphens ? 'checked' : ''}>
               <span class="track"></span><span class="switch-label">Hyphenate long lines</span>
@@ -436,6 +441,7 @@ function onSettingsChange(app, e) {
     return;
   }
   if (id === 'setFont') { setReaderPrefs({ font: e.target.value }); renderSettings(app); return; }
+  if (id === 'setContinuous') { setReaderPrefs({ continuous: e.target.checked }); toast(e.target.checked ? 'Continuous layout on — reopen the book to apply.' : 'Continuous layout off — reopen the book to apply.', 'info'); return; }
   if (id === 'setJustify') { setReaderPrefs({ justify: e.target.checked }); return; }
   if (id === 'setHyphens') { setReaderPrefs({ hyphens: e.target.checked }); return; }
   if (id === 'setAutoLanguage') { savePrefs({ tts: { autoLanguageVoice: e.target.checked } }, { silent: true }); return; }

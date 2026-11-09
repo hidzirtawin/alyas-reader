@@ -633,6 +633,7 @@ export class SpeechEngine {
     this._inFlight = new Map();
     this._pauseTimer = null;
     this._wakeLock = null;
+    this._errorStreak = 0;
 
     this._onVoices = () => {
       window.dispatchEvent(new CustomEvent('lumen:voices'));
@@ -861,7 +862,7 @@ export class SpeechEngine {
       entry = await this._getAudio(chunk);
     } catch (err) {
       if (token !== this._token) return;
-      this._fail(err.message || 'The voice could not be generated.');
+      this._skipUnreadable(err);
       return;
     }
     if (token !== this._token) return;
@@ -881,11 +882,12 @@ export class SpeechEngine {
     };
     audio.onerror = () => {
       if (token !== this._token) return;
-      this._fail('The generated audio could not be played.');
+      this._skipUnreadable(new Error('The generated audio could not be played.'));
     };
     try {
       await audio.play();
       if (token !== this._token) { audio.pause(); return; }
+      this._errorStreak = 0;
       this._startKeepAlive();
       this._setState('playing');
       this._requestWakeLock();
@@ -942,6 +944,16 @@ export class SpeechEngine {
     if (this.state === state) return;
     this.state = state;
     this.onState(state);
+  }
+
+  _skipUnreadable(err) {
+    this._errorStreak = (this._errorStreak || 0) + 1;
+    console.warn('Skipping an unreadable sentence', err);
+    if (this._errorStreak <= 3) {
+      this._advanceSentence();
+      return;
+    }
+    this._fail(err?.message || 'Narration could not continue with this voice.');
   }
 
   _fail(message) {

@@ -678,6 +678,9 @@ function buildChapterSentences(state) {
     const text = raw.trim();
     if (!text || text.length < 2) continue;
     if (!/[\p{L}\p{N}]/u.test(text)) continue;
+    // Skip bare section/page numbers ("2.", "1.1", "IV.") that some
+    // sentence segmenters split off from a heading.
+    if (/^\s*(?:\d+(?:\.\d+)*|[ivxlcdm]+)[.)]?\s*$/i.test(text)) continue;
     const start = seg.start + lead;
     const end = start + text.length;
     const range = rangeFromOffsets(map, start, end);

@@ -255,8 +255,7 @@ function getRefs() {
     progressFill: $('#progressFill'),
     ttsDock: $('#ttsDock'),
     ttsEq: $('#ttsEq'),
-    ttsProgress: $('#ttsProgress'),
-    ttsProgressFill: $('#ttsProgressFill'),
+    ttsPercent: $('#ttsPercent'),
     ttsVoiceLabel: $('#ttsVoiceLabel'),
     ttsPos: $('#ttsPos'),
     ttsSpeedBtn: $('#ttsSpeedBtn'),
@@ -287,7 +286,7 @@ function resetReaderUI(state) {
   refs.ttsBtn.querySelector('span').textContent = 'Listen';
   refs.ttsEq.classList.remove('is-live');
   refs.ttsPos.textContent = '—';
-  if (refs.ttsProgress) refs.ttsProgress.hidden = true;
+  if (refs.ttsPercent) refs.ttsPercent.hidden = true;
   refs.progressFill.style.width = '0%';
   refs.footLeft.textContent = '';
   refs.footRight.textContent = '';
@@ -317,12 +316,12 @@ function wireEvents(state) {
 
   const stopProgress = onPiperProgress(p => {
     const eng = state.engine;
-    if (!eng || eng.provider !== 'piper' || !refs.ttsProgress) return;
-    if (eng.state !== 'loading') { refs.ttsProgress.hidden = true; return; }
+    if (!eng || eng.provider !== 'piper' || !refs.ttsPercent) return;
+    if (eng.state !== 'loading') { refs.ttsPercent.hidden = true; return; }
     const active = p.phase === 'downloading' || p.phase === 'preparing' || p.phase === 'generating';
-    refs.ttsProgress.hidden = !active;
+    refs.ttsPercent.hidden = !active;
     if (!active) return;
-    refs.ttsProgressFill.style.width = `${p.phase === 'downloading' ? p.percent : 100}%`;
+    refs.ttsPercent.textContent = p.phase === 'downloading' ? `${p.percent}%` : '…';
     refs.ttsPos.textContent = piperProgressLabel(p);
   });
   state.cleanup.push(stopProgress);
@@ -1421,7 +1420,7 @@ function updateTTSState(state, st) {
   }
   refs.ttsEq.classList.toggle('is-live', st === 'playing');
   if (st === 'playing') refs.ttsEq.classList.add('is-live');
-  if (refs.ttsProgress && st !== 'loading') refs.ttsProgress.hidden = true;
+  if (refs.ttsPercent && st !== 'loading') refs.ttsPercent.hidden = true;
   if (st === 'loading') {
     const e = state.engine;
     refs.ttsPos.textContent = e?.total && (e.index || 0) > 0

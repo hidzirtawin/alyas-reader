@@ -608,7 +608,7 @@ export async function openVoiceModal({ onSaved } = {}) {
       <div class="slider-line"><span style="font-size:11px;width:84px;color:var(--ink-3)">Speed</span><input class="range" id="vmRate" type="range" min="0.5" max="2" step="0.05" value="${draft.rate}"><output id="vmRateOut">${draft.rate.toFixed(2)}×</output></div>
       <div style="margin-top:14px"><button class="btn btn-sm" data-preview>${icon('loudhailer')} Download &amp; preview</button></div>
       <div class="voice-progress" id="voiceProgress" hidden>
-        <div class="voice-progress-track"><i id="voiceProgressFill"></i></div>
+        <span class="voice-progress-pct" id="voiceProgressPct">0%</span>
         <span class="voice-progress-text" id="voiceProgressText">Downloading voice…</span>
       </div>
       <p class="hint" style="margin-top:10px">The first preview loads the model and shows live progress; later sentences are generated while the previous one plays. Australian English is a community model. Sources: <a href="https://github.com/rhasspy/piper" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">rhasspy/piper</a> · <a href="https://huggingface.co/rhasspy/piper-voices" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">voice models</a>.</p>`;
@@ -757,7 +757,7 @@ export async function openVoiceModal({ onSaved } = {}) {
     const old = btn.innerHTML;
     btn.innerHTML = tab === 'piper' ? '<span class="busy-dot"></span> Preparing voice…' : '<span class="busy-dot"></span> Generating voice…';
     const progress = tabBody.querySelector('#voiceProgress');
-    const fill = tabBody.querySelector('#voiceProgressFill');
+    const pctOut = tabBody.querySelector('#voiceProgressPct');
     const label = tabBody.querySelector('#voiceProgressText');
     const stopProgress = onPiperProgress(p => {
       if (probe.provider !== 'piper' || p.voiceId !== probe.piperVoice) return;
@@ -765,8 +765,10 @@ export async function openVoiceModal({ onSaved } = {}) {
       if (progress) progress.hidden = !active;
       if (!active) return;
       const pct = p.phase === 'downloading' ? p.percent : 100;
-      if (fill) fill.style.width = `${pct}%`;
-      const text = piperProgressLabel(p);
+      if (pctOut) pctOut.textContent = `${pct}%`;
+      const text = p.phase === 'downloading'
+        ? `${Math.round((p.loaded || 0) / 1048576)} / ${Math.round((p.total || 0) / 1048576)} MB`
+        : (p.phase === 'preparing' ? 'Preparing voice…' : 'Generating speech…');
       if (label) label.textContent = text;
       btn.innerHTML = `<span class="busy-dot"></span> ${text}`;
     });

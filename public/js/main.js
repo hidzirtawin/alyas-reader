@@ -272,12 +272,10 @@ function renderVoicePill(p) {
     voicePill = document.createElement('div');
     voicePill.className = 'voice-pill';
     voicePill.setAttribute('aria-live', 'polite');
-    voicePill.innerHTML = '<span class="vp-label"></span><span class="vp-track"><i></i></span>';
+    voicePill.innerHTML = '<span class="vp-label"></span>';
     document.body.appendChild(voicePill);
   }
-  const pct = p.phase === 'downloading' ? p.percent : 100;
   voicePill.querySelector('.vp-label').textContent = piperProgressLabel(p);
-  voicePill.querySelector('.vp-track i').style.width = `${pct}%`;
 }
 
 function warmDefaultVoice() {

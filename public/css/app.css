@@ -984,16 +984,13 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
   transition: opacity .25s, transform .25s var(--ease);
 }
 .tts-dock.is-open { opacity: 1; pointer-events: auto; transform: translate(-50%, 0); }
-.tts-progress {
-  position: absolute; left: 14px; right: 14px; top: 3px; height: 2.5px;
-  border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.14);
+.tts-percent {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 38px; padding: 3px 7px; border-radius: 999px; flex: none;
+  background: rgba(255,255,255,.1); color: #f1e8d7;
+  font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums;
 }
-.tts-progress[hidden] { display: none; }
-.tts-progress i {
-  display: block; height: 100%; width: 0%;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  border-radius: inherit; transition: width .2s ease;
-}
+.tts-percent[hidden] { display: none; }
 [data-theme="paper"] .tts-dock, [data-theme="sepia"] .tts-dock { background: #211c15; }
 .tts-dock .icon-btn { color: #b9ae9c; width: 34px; height: 34px; }
 .tts-dock .icon-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
@@ -1278,8 +1275,7 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
   font-size: 11px; color: var(--ink-2);
   animation: toast-in .25s var(--ease) both;
 }
-.voice-pill .vp-track { height: 3px; border-radius: 999px; overflow: hidden; background: var(--surface-3); }
-.voice-pill .vp-track i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: inherit; transition: width .2s; }
+.voice-pill .vp-label { font-weight: 600; color: var(--ink); }
 
 .sources-note {
   margin-top: 20px; padding: 11px 13px; border-radius: 11px;
@@ -1706,18 +1702,9 @@ kbd { font-family: var(--font-ui); font-size: 10px; font-weight: 600; min-width:
 }
 .dict-suggest button:hover { border-color: var(--accent); color: var(--ink); }
 .speaker-count { font-size: 10px; color: var(--ink-3); margin: 2px 0 5px; }
-.voice-progress { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+.voice-progress { margin-top: 10px; display: flex; align-items: baseline; gap: 8px; }
 .voice-progress[hidden] { display: none; }
-.voice-progress-track {
-  height: 4px; border-radius: 999px; overflow: hidden;
-  background: var(--surface-3);
-}
-.voice-progress-track i {
-  display: block; height: 100%; width: 0%;
-  border-radius: inherit; background: var(--accent);
-  transition: width .18s ease;
-  background-image: linear-gradient(90deg, var(--accent), var(--accent-2));
-}
+.voice-progress-pct { font-size: 22px; font-weight: 600; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
 .voice-progress-text { font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .detail-cover .book-cover { width: 92px; }
 .mark-group-head h3,

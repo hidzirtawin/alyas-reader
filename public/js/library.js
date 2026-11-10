@@ -368,15 +368,24 @@ export function refreshImportQueue(app) {
   el.innerHTML = app.imports.map(importRowMarkup).join('');
 }
 
-export async function importFiles(app, fileList) {
+export async function importFiles(app, fileList, pendingIds = []) {
   const files = Array.from(fileList || []).filter(Boolean);
   if (!files.length) return;
 
   if (app.view !== 'library') app.go('library');
 
-  const jobs = files.map(file => ({
+  // Persist the incoming files before doing any work, so a refresh while
+  // an import is being prepared can resume it instead of losing it.
+  const importIds = Array.from({ length: files.length }, (_, i) => pendingIds[i] || null);
+  for (let i = 0; i < files.length; i++) {
+    if (importIds[i]) continue;
+    try { importIds[i] = await db.addPendingImport(files[i]); } catch {}
+  }
+
+  const jobs = files.map((file, i) => ({
     id: uid(),
     file,
+    pendingId: importIds[i],
     status: 'pending',
     message: 'Waiting…',
   }));
@@ -438,6 +447,10 @@ export async function importFiles(app, fileList) {
       job.status = 'error';
       job.message = friendlyError(err);
       refreshImportQueue(app);
+    } finally {
+      if (job.pendingId) {
+        try { await db.deletePendingImport(job.pendingId); } catch {}
+      }
     }
   }
 

@@ -41,7 +41,7 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 - **Dyslexia-friendly mode** — one tap sets OpenDyslexic, larger text, roomy lines, wider letter/word spacing and left-aligned text.
 - **Sleep timer** — choose 5 to 90 minutes in Settings or the reader menu; narration stops and the screen dims when it ends.
 - **Marks & notes** — bookmarks and four-colour highlights with notes. Everything is grouped by book and reopens at the exact spot.
-- **Autosave** — position, settings, bookmarks and highlights are saved as you read. Comic progress and bookmarks are page-based.
+- **Refresh-safe** — uploaded books, settings, positions, bookmarks and highlights live in IndexedDB. Files that were mid-import when the page refreshed are kept and the import resumes automatically on the next load.
 - **Library backup** — download one zip containing every book file, cover, reading position, bookmark and note; restore it on this or another device. A lightweight notes-only export is also available.
 - **Collections** — group books from the book menu, then filter the library with collection chips.
 - **Interruption recovery** — if the browser reloads or interrupts playback, Alya’s Reader reopens the same book and chapter and resumes narration automatically where the browser allows it.

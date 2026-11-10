@@ -336,6 +336,18 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)
 window.addEventListener('offline', () => toast('Offline — using your downloaded library and voices.', 'info'));
 window.addEventListener('online', () => toast('Back online', 'ok'));
 
+async function resumePendingImports(app) {
+  try {
+    const pending = await db.listPendingImports();
+    if (!pending.length) return;
+    const files = pending.map(p => new File([p.blob], p.name, { type: p.type || '' }));
+    toast(`Resuming ${pending.length} interrupted import${pending.length === 1 ? '' : 's'}…`, 'info');
+    await importFiles(app, files, pending.map(p => p.id));
+  } catch (err) {
+    console.warn('Could not resume imports', err);
+  }
+}
+
 /* ── Boot ────────────────────────────────────────────────────────── */
 async function boot() {
   applyPrefs();
@@ -351,6 +363,7 @@ async function boot() {
     await app.reload({ render: false });
     app.go('library');
     navigator.storage?.persist?.().catch?.(() => {});
+    resumePendingImports(app);
     restoreReadingSession(app);
     warmDefaultVoice();
   } catch (err) {

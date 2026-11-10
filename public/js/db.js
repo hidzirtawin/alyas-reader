@@ -1,7 +1,7 @@
 /* IndexedDB persistence: library metadata, original files, progress, marks. */
 
 const DB_NAME = 'lumen-reader';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 let dbPromise = null;
 
 function openDB() {
@@ -24,6 +24,9 @@ function openDB() {
       if (!db.objectStoreNames.contains('highlights')) {
         const s = db.createObjectStore('highlights', { keyPath: 'id' });
         s.createIndex('bookId', 'bookId', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('imports')) {
+        db.createObjectStore('imports', { keyPath: 'id' });
       }
     };
     req.onsuccess = () => {
@@ -87,6 +90,27 @@ async function byIndex(name, index, key) {
 }
 
 export const db = {
+  async addPendingImport(file) {
+    const id = (crypto.randomUUID?.() || `import-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    await put('imports', {
+      id,
+      name: file.name,
+      size: file.size,
+      type: file.type || '',
+      blob: file,
+      addedAt: Date.now(),
+    });
+    return id;
+  },
+
+  listPendingImports() {
+    return getAll('imports').then(list => list.sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0)));
+  },
+
+  deletePendingImport(id) {
+    return del('imports', id);
+  },
+
   async listBooks() {
     const books = await getAll('books');
     return books.sort((a, b) => (b.lastOpenedAt || b.addedAt || 0) - (a.lastOpenedAt || a.addedAt || 0));
@@ -147,7 +171,7 @@ export const db = {
 
   async clearAll() {
     const dbi = await openDB();
-    const names = ['books', 'files', 'progress', 'bookmarks', 'highlights'];
+    const names = ['books', 'files', 'progress', 'bookmarks', 'highlights', 'imports'];
     const tx = dbi.transaction(names, 'readwrite');
     names.forEach(n => tx.objectStore(n).clear());
     await done(tx);

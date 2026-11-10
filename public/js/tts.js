@@ -759,8 +759,6 @@ export class SpeechEngine {
     this.onError = onError || (() => {});
 
     this.sentences = [];
-    this._timelineWords = [];
-    this._timelinePrefix = [0];
     this.index = 0;
     this.state = 'idle'; // idle | loading | playing | paused
     this._chunks = [];
@@ -864,14 +862,11 @@ export class SpeechEngine {
   get enabled() { return getPrefs().tts.enabled; }
 
   /* ── loading ─────────────────────────────────────────────────── */
-  load(sentences = [], { autoplay = false, start = 0 } = {}) {
+  load(sentences = [], { autoplay = false, start = 0, startFraction = null, paused = false } = {}) {
     this._invalidate();
     this._wantPlaying = false;
     this.sentences = sentences;
-    this._timelineWords = sentences.map(sentence => Math.max(1, String(sentence?.text || '').trim().split(/\s+/).filter(Boolean).length));
-    this._timelinePrefix = [0];
-    for (const count of this._timelineWords) this._timelinePrefix.push(this._timelinePrefix.at(-1) + count);
-    this._seekFraction = null;
+    this._seekFraction = startFraction == null ? null : clampNum(startFraction, 0, 0.999);
     this._chunkSeekFraction = null;
     this._completed = false;
     this.index = Math.max(0, Math.min(start, sentences.length - 1));
@@ -1003,28 +998,6 @@ export class SpeechEngine {
     }
   }
 
-  getPlaybackProgress() {
-    if (!this.sentences.length) return null;
-    const rate = clampNum(getPrefs().tts.rate, 0.5, 2);
-    const secondsPerWord = 60 / (160 * rate);
-    const totalWords = this._timelinePrefix.at(-1) || 0;
-    if (!totalWords) return null;
-    if (this._completed) {
-      const duration = totalWords * secondsPerWord;
-      return { position: duration, duration };
-    }
-    const clip = this._getClipProgress();
-    const before = this._timelinePrefix[this.index] || 0;
-    const currentWords = this._timelineWords[this.index] || 1;
-    const fraction = clip
-      ? clip.position / clip.duration
-      : (this._chunkSeekFraction ?? this._seekFraction ?? 0);
-    return {
-      position: (before + currentWords * fraction) * secondsPerWord,
-      duration: totalWords * secondsPerWord,
-    };
-  }
-
   _getClipProgress() {
     if (this._audioBuffer && sharedAudioCtx) {
       let position = this._audioOffset;
@@ -1039,23 +1012,27 @@ export class SpeechEngine {
     return null;
   }
 
-  seekPlayback(seconds) {
-    const progress = this.getPlaybackProgress();
-    if (!progress) return false;
-    const ttsRate = clampNum(getPrefs().tts.rate, 0.5, 2);
-    let targetWords = clampNum(seconds, 0, progress.duration) * (160 * ttsRate / 60);
-    let sentenceIndex = 0;
-    while (sentenceIndex < this._timelineWords.length - 1 && targetWords >= this._timelineWords[sentenceIndex]) {
-      targetWords -= this._timelineWords[sentenceIndex];
-      sentenceIndex++;
-    }
-    const sentenceWords = this._timelineWords[sentenceIndex] || 1;
-    const fraction = clampNum(targetWords / sentenceWords, 0, 0.999);
+  getSentenceProgress() {
+    if (this._completed) return 1;
+    if (!this._chunks.length) return this._seekFraction ?? 0;
+    const units = this._chunks.map(speechUnits);
+    const total = units.reduce((sum, value) => sum + value, 0) || 1;
+    let local = this._seekFraction ?? this._chunkSeekFraction ?? 0;
+    const clip = this._getClipProgress();
+    if (clip) local = clip.position / clip.duration;
+    if (this.provider === 'system' && Number.isFinite(this._systemChunkFraction)) local = this._systemChunkFraction;
+    const before = units.slice(0, this._chunkIndex).reduce((sum, value) => sum + value, 0);
+    return Math.max(0, Math.min(1, (before + units[this._chunkIndex] * local) / total));
+  }
+
+  seekToSentence(index, fraction = 0) {
+    if (!this.sentences.length) return false;
+    const target = Math.max(0, Math.min(this.sentences.length - 1, Math.floor(Number(index) || 0)));
     const wasPlaying = this.state === 'playing' || this.state === 'loading';
     const wasPaused = this.state === 'paused';
-    this._seekFraction = fraction;
+    this._seekFraction = clampNum(fraction, 0, 0.999);
     this._completed = false;
-    this._startSentence(sentenceIndex, { autoplay: wasPlaying, silent: !wasPlaying });
+    this._startSentence(target, { autoplay: wasPlaying, silent: !wasPlaying });
     if (wasPaused) this._setState('paused');
     return true;
   }
@@ -1090,6 +1067,10 @@ export class SpeechEngine {
   _startSentence(i, { autoplay = true, silent = false } = {}) {
     if (!this.sentences[i]) return;
     this._invalidate();
+    this._chunks = [];
+    this._chunkIndex = 0;
+    this._chunkSeekFraction = null;
+    this._systemChunkFraction = null;
     this._completed = false;
     this.index = i;
     const sentence = this.sentences[i];
@@ -1107,12 +1088,18 @@ export class SpeechEngine {
     this._chunks = splitLongText(text, this.provider === 'piper' ? 800 : 240);
     const seekFraction = this._seekFraction;
     this._seekFraction = null;
-    this._chunkIndex = seekFraction == null || this.provider === 'system'
-      ? 0
-      : Math.min(this._chunks.length - 1, Math.floor(seekFraction * this._chunks.length));
-    this._chunkSeekFraction = seekFraction == null || this.provider === 'system'
-      ? null
-      : seekFraction * this._chunks.length - this._chunkIndex;
+    this._chunkIndex = 0;
+    this._chunkSeekFraction = null;
+    if (seekFraction != null && this.provider !== 'system') {
+      const chunkUnits = this._chunks.map(speechUnits);
+      const totalUnits = chunkUnits.reduce((sum, units) => sum + units, 0) || 1;
+      let targetUnits = seekFraction * totalUnits;
+      while (this._chunkIndex < chunkUnits.length - 1 && targetUnits >= chunkUnits[this._chunkIndex]) {
+        targetUnits -= chunkUnits[this._chunkIndex];
+        this._chunkIndex++;
+      }
+      this._chunkSeekFraction = clampNum(targetUnits / chunkUnits[this._chunkIndex], 0, 0.999);
+    }
     this._setPlaying();
     this._speakChunk();
     this._prefetch(i);
@@ -1137,6 +1124,7 @@ export class SpeechEngine {
 
     const token = ++this._token;
     const utter = new SpeechSynthesisUtterance(chunk);
+    this._systemChunkFraction = 0;
     const voice = findVoice(prefs.voiceURI) || englishVoices()[0] || null;
     if (voice) { utter.voice = voice; utter.lang = voice.lang; }
     utter.rate = clampNum(prefs.rate, 0.5, 2);
@@ -1145,7 +1133,12 @@ export class SpeechEngine {
 
     utter.onend = () => {
       if (token !== this._token) return;
+      this._systemChunkFraction = 1;
       this._advanceChunk();
+    };
+    utter.onboundary = event => {
+      if (token !== this._token || !Number.isFinite(event.charIndex)) return;
+      this._systemChunkFraction = Math.max(0, Math.min(1, event.charIndex / Math.max(1, chunk.length)));
     };
     utter.onerror = e => {
       if (token !== this._token) return;
@@ -1478,7 +1471,7 @@ export class SpeechEngine {
   /* Generate upcoming text without changing the current sentence. */
   prefetchTexts(texts = []) {
     if (this.provider !== 'piper') return;
-    for (const text of texts.slice(0, 3)) {
+    for (const text of texts.slice(0, 1)) {
       const clean = cleanForSpeech(text);
       if (!clean) continue;
       const chunk = splitLongText(clean, 800)[0];
@@ -1514,8 +1507,8 @@ export class SpeechEngine {
 
   _prefetch(sentenceIndex) {
     if (this.provider !== 'piper') return;
-    // Queue the next two sentences so first-time generation has a head start.
-    for (let d = 1; d <= 3; d++) {
+    // Queue only the next sentence so a long-book seek is never buried behind prefetch work.
+    for (let d = 1; d <= 1; d++) {
       const next = this.sentences[sentenceIndex + d];
       if (!next) break;
       const text = cleanForSpeech(next.text);
@@ -1578,6 +1571,10 @@ function clampNum(n, min, max) {
   const v = Number(n);
   if (!Number.isFinite(v)) return min;
   return Math.min(max, Math.max(min, v));
+}
+
+function speechUnits(text) {
+  return Math.max(1, (String(text || '').match(/[\p{L}\p{M}\p{N}]/gu) || []).length);
 }
 
 /* ── One-off preview used by settings / voice picker ───────────────── */

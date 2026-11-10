@@ -947,6 +947,7 @@ textarea.input { height: auto; min-height: 84px; padding: 11px 13px; resize: ver
 .foot-nav-label:hover { color: var(--reader-ink); text-decoration-color: currentColor; }
 
 ::highlight(lumen-tts) { background-color: color-mix(in srgb, var(--accent) 26%, transparent); color: inherit; }
+::highlight(lumen-tts-word) { background-color: var(--accent-2); color: var(--accent-ink); border-radius: 2px; }
 ::highlight(lumen-search) { background-color: color-mix(in srgb, #e9b94c 62%, transparent); color: inherit; }
 .book-search-form { display: flex; gap: 8px; margin-bottom: 10px; }
 .book-search-form .input { height: 38px; flex: 1; }
@@ -1189,6 +1190,7 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
 .textLayer ::selection { background: color-mix(in srgb, var(--accent) 32%, transparent); color: transparent; }
 .pdf-hl-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .pdf-hl { position: absolute; border-radius: 2px; background: color-mix(in srgb, var(--accent) 25%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent); mix-blend-mode: multiply; }
+.pdf-word-hl { background: color-mix(in srgb, var(--accent-2) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-2) 75%, transparent); mix-blend-mode: normal; }
 [data-theme="night"] .pdf-hl, [data-theme="black"] .pdf-hl { mix-blend-mode: normal; background: rgba(224,128,84,.3); }
 .pdf-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; height: 100%; min-height: 50vh; color: var(--reader-ink-2); font-size: 12px; }
 .pdf-loading .spinner { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--reader-line); border-top-color: var(--accent); animation: spin .8s linear infinite; }

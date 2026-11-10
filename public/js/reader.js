@@ -317,6 +317,7 @@ function resetReaderUI(state) {
   refs.ttsBtn.querySelector('span').textContent = 'Listen';
   refs.ttsEq.classList.remove('is-live');
   refs.ttsPos.textContent = '—';
+  updateSpeedLabel();
   updateTTSTimeline(state);
   if (refs.ttsPercent) refs.ttsPercent.hidden = true;
   refs.progressFill.style.width = '0%';
@@ -408,21 +409,21 @@ function wireEvents(state) {
   refs.ttsSeek.addEventListener('input', () => {
     state.ttsSeeking = true;
     state.ttsSeekRequested = Number(refs.ttsSeek.value);
-    const progress = state.engine?.getPlaybackProgress?.();
+    const progress = readerTimelineProgress(state);
     if (!progress) return;
     refs.ttsElapsed.textContent = formatAudioTime(progress.duration * state.ttsSeekRequested / 1000);
   });
   refs.ttsSeek.addEventListener('change', () => {
-    const progress = state.engine?.getPlaybackProgress?.();
+    const progress = readerTimelineProgress(state);
     const requested = Number.isFinite(state.ttsSeekRequested) ? state.ttsSeekRequested : Number(refs.ttsSeek.value);
-    if (progress) state.engine.seekPlayback(progress.duration * requested / 1000);
+    if (progress) seekReaderTimeline(state, progress.duration * requested / 1000);
     state.ttsSeekRequested = null;
     state.ttsSeeking = false;
-    state.ttsSeekRequested = null;
     updateTTSTimeline(state);
   });
   refs.ttsSeek.addEventListener('pointercancel', () => {
     state.ttsSeeking = false;
+    state.ttsSeekRequested = null;
     updateTTSTimeline(state);
   });
 
@@ -837,26 +838,105 @@ function rangeForText(map, text, preferredOffset) {
   return { start, end: start + text.length, range: rangeFromOffsets(map, start, start + text.length) };
 }
 
-function buildChapterSentences(state) {
-  if (state.sentences) return state.sentences;
-  const article = state.article;
-  if (!article) return [];
-  const map = buildTextMap(article);
+function wordTokens(text) {
+  const out = [];
+  const re = /[\p{L}\p{M}\p{N}]+(?:[’'\-][\p{L}\p{M}\p{N}]+)*/gu;
+  let match;
+  while ((match = re.exec(text))) {
+    out.push({ text: match[0], start: match.index, end: match.index + match[0].length, weight: Math.max(1, match[0].length) });
+  }
+  return out;
+}
+
+function sentenceRecordsFromMap(map, chapterIndex, { includeRanges = true } = {}) {
   const out = [];
   for (const seg of detectSentenceSegments(map.text)) {
     const raw = seg.text;
     const lead = raw.length - raw.trimStart().length;
     const text = raw.trim();
-    if (!text || text.length < 2) continue;
-    if (!/[\p{L}\p{N}]/u.test(text)) continue;
-    // Skip bare section/page numbers ("2.", "1.1", "IV.") that some
-    // sentence segmenters split off from a heading.
+    if (!text || text.length < 2 || !/[\p{L}\p{N}]/u.test(text)) continue;
     if (/^\s*(?:\d+(?:\.\d+)*|[ivxlcdm]+)[.)]?\s*$/i.test(text)) continue;
     const start = seg.start + lead;
-    const end = start + text.length;
-    const range = rangeFromOffsets(map, start, end);
-    if (range) out.push({ text, range, meta: { chapterIndex: state.chapterIndex } });
+    const tokens = wordTokens(text);
+    const wordRanges = includeRanges
+      ? tokens.map(word => ({ ...word, range: rangeFromOffsets(map, start + word.start, start + word.end) })).filter(word => word.range)
+      : tokens;
+    const range = rangeFromOffsets(map, start, start + text.length);
+    if (range && wordRanges.length) {
+      out.push({ text, range, wordRanges, meta: { chapterIndex, localIndex: out.length } });
+    }
   }
+  return out;
+}
+
+function buildReflowTimeline(state) {
+  if (state.bookTimeline?.book === state.book) return state.bookTimeline;
+  const entries = [];
+  const byChapter = state.book.chapters.map(() => []);
+  for (let chapterIndex = 0; chapterIndex < state.book.chapters.length; chapterIndex++) {
+    const chapter = state.book.chapters[chapterIndex];
+    const holder = document.createElement('div');
+    holder.className = 'reading';
+    holder.innerHTML = chapter.html || '';
+    const map = buildTextMap(holder);
+    const records = sentenceRecordsFromMap(map, chapterIndex, { includeRanges: false });
+    for (const record of records) {
+      const weights = record.wordRanges.map(word => word.weight);
+      const entry = {
+        chapterIndex,
+        sentenceIndex: record.meta.localIndex,
+        wordCount: weights.length,
+        weight: weights.length * 5,
+      };
+      byChapter[chapterIndex].push(entries.length);
+      entries.push(entry);
+    }
+  }
+  const prefix = [0];
+  for (const entry of entries) prefix.push(prefix[prefix.length - 1] + entry.weight);
+  state.bookTimeline = { book: state.book, entries, byChapter, prefix, totalWeight: prefix[prefix.length - 1] || 0 };
+  return state.bookTimeline;
+}
+
+async function ensurePdfTimeline(state) {
+  if (state.pdfTimeline) return state.pdfTimeline;
+  if (state.pdfTimelinePromise) return state.pdfTimelinePromise;
+  state.pdfTimelinePromise = (async () => {
+    const entries = [];
+    const byPage = Array.from({ length: state.numPages || 0 }, () => []);
+    for (let page = 1; page <= (state.numPages || 0); page++) {
+      if (state.destroyed) return null;
+      const sentences = await state.pdfView.getPageSentences(page);
+      for (let sentenceIndex = 0; sentenceIndex < sentences.length; sentenceIndex++) {
+        const text = String(sentences[sentenceIndex].text || '').trim();
+        const weights = wordTokens(text).map(word => word.weight);
+        if (!weights.length) continue;
+        byPage[page - 1].push(entries.length);
+        entries.push({ page, sentenceIndex, wordCount: weights.length, weight: weights.length * 5 });
+      }
+      if (page % 12 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    if (state.destroyed) return null;
+    const prefix = [0];
+    for (const entry of entries) prefix.push(prefix[prefix.length - 1] + entry.weight);
+    state.pdfTimeline = { entries, byPage, prefix, totalWeight: prefix[prefix.length - 1] || 0 };
+    const page = state.ttsPage || state.page || 1;
+    const local = state.engine?.index || 0;
+    state.timelineEntryIndex = byPage[page - 1]?.[local] ?? null;
+    updateTTSTimeline(state);
+    return state.pdfTimeline;
+  })().finally(() => { state.pdfTimelinePromise = null; });
+  return state.pdfTimelinePromise;
+}
+
+function buildChapterSentences(state) {
+  if (state.sentences) return state.sentences;
+  const article = state.article;
+  if (!article) return [];
+  const map = buildTextMap(article);
+  const out = sentenceRecordsFromMap(map, state.chapterIndex);
+  const globalEntries = buildReflowTimeline(state).byChapter[state.chapterIndex] || [];
+  out.forEach((sentence, index) => { sentence.meta.timelineIndex = globalEntries[index]; });
   state.sentences = out;
   return out;
 }
@@ -1460,7 +1540,7 @@ function applyBookVoice(state) {
   }
 }
 
-async function startTTS(state, { autoplay = true, start = null } = {}) {
+async function startTTS(state, { autoplay = true, start = null, startFraction = null, paused = false } = {}) {
   applyBookVoice(state);
   if (state.mode === 'comic') {
     toast('Comic pages are images, so there’s no text to narrate.', 'info');
@@ -1471,22 +1551,28 @@ async function startTTS(state, { autoplay = true, start = null } = {}) {
     return;
   }
   if (state.mode === 'pdf') {
-    return startPdfTTS(state, { autoplay, page: state.page || 1, start });
+    return startPdfTTS(state, { autoplay, page: state.page || 1, start, startFraction, paused });
   }
+  buildReflowTimeline(state);
   const sentences = buildChapterSentences(state);
   if (!sentences.length) return false;
   let index = start;
   if (index == null) index = firstVisibleSentence(state, sentences);
   openDock(state);
   state.ttsPage = null;
-  state.engine.load(sentences, { autoplay, start: clamp(index || 0, 0, sentences.length - 1) });
+  state.engine.load(sentences, {
+    autoplay,
+    paused,
+    start: clamp(index || 0, 0, sentences.length - 1),
+    startFraction,
+  });
   updateMediaSession(state);
-  if (autoplay) state.engine.play();
   return true;
 }
 
-async function startPdfTTS(state, { autoplay = true, page = null, start = null } = {}) {
+async function startPdfTTS(state, { autoplay = true, page = null, start = null, startFraction = null, paused = false } = {}) {
   if (!state.pdfView) return;
+  ensurePdfTimeline(state).catch(err => console.warn('Could not prepare the PDF seek timeline', err));
   let p = clamp(page || state.page || 1, 1, state.numPages || 1);
   let sentences = await state.pdfView.getPageSentences(p);
   let tries = 0;
@@ -1504,9 +1590,13 @@ async function startPdfTTS(state, { autoplay = true, page = null, start = null }
   sentences = sentences.map(s => ({ ...s, page: p }));
   openDock(state);
   state.ttsPage = p;
-  state.engine.load(sentences, { autoplay, start: clamp(start || 0, 0, sentences.length - 1) });
+  state.engine.load(sentences, {
+    autoplay,
+    paused,
+    start: clamp(start || 0, 0, sentences.length - 1),
+    startFraction,
+  });
   updateMediaSession(state);
-  if (autoplay) state.engine.play();
   return true;
 }
 
@@ -1522,6 +1612,15 @@ function firstVisibleSentence(state, sentences) {
 
 function onTTSSentence(state, sentence, index) {
   refs.ttsPos.textContent = `${index + 1} / ${state.engine.total}`;
+  state.ttsCurrentSentence = sentence;
+  state.ttsCurrentWordIndex = -1;
+  if (state.mode === 'pdf') {
+    const page = sentence.page || state.ttsPage || state.page || 1;
+    state.timelineEntryIndex = state.pdfTimeline?.byPage?.[page - 1]?.[index] ?? null;
+  } else {
+    const chapter = sentence.meta?.chapterIndex ?? state.chapterIndex;
+    state.timelineEntryIndex = state.bookTimeline?.byChapter?.[chapter]?.[sentence.meta?.localIndex ?? index] ?? null;
+  }
   rememberReadingSession(state);
   prefetchNextChapter(state, index);
   if (!getPrefs().tts.highlight) return;
@@ -1557,7 +1656,7 @@ function prefetchNextChapter(state, index) {
   const nextIndex = state.chapterIndex + 1;
   if (nextIndex >= state.book.chapters.length || state.prefetchedChapter === nextIndex) return;
   if (!chapterHasBody(state.book.chapters[nextIndex])) return;
-  const texts = sentencesFromChapter(state.book.chapters[nextIndex]).slice(0, 3);
+  const texts = sentencesFromChapter(state.book.chapters[nextIndex]).slice(0, 1);
   if (!texts.length) return;
   state.prefetchedChapter = nextIndex;
   state.engine?.prefetchTexts(texts);
@@ -1581,7 +1680,10 @@ function showTTSHighlight(state, sentence) {
 
 function clearTTSHighlight(state) {
   try { CSS.highlights?.delete('lumen-tts'); } catch {}
+  try { CSS.highlights?.delete('lumen-tts-word'); } catch {}
   state.ttsHighlight = null;
+  state.ttsWordHighlight = null;
+  state.ttsCurrentWordIndex = -1;
   if (state.ttsBlock) { state.ttsBlock.classList.remove('tts-block-hl'); state.ttsBlock = null; }
   if (state.mode === 'pdf') state.pdfView?.clearHighlight?.();
 }
@@ -1634,6 +1736,35 @@ function updateTTSState(state, st) {
     } catch {}
   }
   if (st === 'playing') updateMediaSession(state);
+}
+
+function updateTTSWordHighlight(state) {
+  if (!getPrefs().tts.highlight || !state?.ttsCurrentSentence) return;
+  const words = state.ttsCurrentSentence.wordRanges || state.ttsCurrentSentence.words;
+  if (!words?.length) return;
+  const weights = words.map(word => word.weight || 1);
+  const total = weights.reduce((sum, value) => sum + value, 0) || 1;
+  const target = (state.engine?.getSentenceProgress?.() || 0) * total;
+  let sum = 0;
+  let index = words.length - 1;
+  for (let i = 0; i < words.length; i++) {
+    sum += weights[i];
+    if (target < sum) { index = i; break; }
+  }
+  if (index === state.ttsCurrentWordIndex) return;
+  state.ttsCurrentWordIndex = index;
+  if (state.mode === 'pdf') {
+    state.pdfView?.showWordHighlight(state.ttsCurrentSentence, index);
+    return;
+  }
+  const range = words[index]?.range;
+  if (range && window.CSS?.highlights && window.Highlight) {
+    try {
+      const highlight = new Highlight(range);
+      CSS.highlights.set('lumen-tts-word', highlight);
+      state.ttsWordHighlight = highlight;
+    } catch {}
+  }
 }
 
 function onTTSEnd(state) {
@@ -1783,30 +1914,84 @@ function updateSpeedLabel() {
 }
 
 function formatSpeed(n) {
-  return `${Number(Number(n).toFixed(2))}×`;
+  return `${clamp(Number(n) || 1, 0.5, 2).toFixed(2)}×`;
 }
 
 function formatAudioTime(seconds) {
   const value = Math.max(0, Math.floor(Number(seconds) || 0));
+  const hours = Math.floor(value / 3600);
   const minutes = Math.floor(value / 60);
+  if (hours) return `${hours}:${String(minutes % 60).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
   return `${minutes}:${String(value % 60).padStart(2, '0')}`;
+}
+
+function readerTimelineProgress(state) {
+  const timeline = state?.mode === 'pdf' ? state.pdfTimeline : state.bookTimeline;
+  const index = state?.timelineEntryIndex;
+  const entry = timeline?.entries?.[index];
+  if (!timeline || !entry || !timeline.totalWeight) return null;
+  const rate = clamp(Number(getPrefs().tts.rate) || 1, 0.5, 2);
+  const secondsPerWeight = 60 / (160 * 5 * rate);
+  const fraction = state.engine?.getSentenceProgress?.() || 0;
+  const position = ((timeline.prefix[index] || 0) + entry.weight * fraction) * secondsPerWeight;
+  return { position, duration: timeline.totalWeight * secondsPerWeight };
+}
+
+async function seekReaderTimeline(state, seconds) {
+  let timeline = state.mode === 'pdf' ? state.pdfTimeline : state.bookTimeline;
+  if (!timeline && state.mode === 'pdf') timeline = await ensurePdfTimeline(state);
+  if (!timeline?.entries?.length || !timeline.totalWeight) return false;
+  const rate = clamp(Number(getPrefs().tts.rate) || 1, 0.5, 2);
+  const totalSeconds = timeline.totalWeight * 60 / (160 * 5 * rate);
+  let target = clamp(Number(seconds) || 0, 0, totalSeconds) * (160 * 5 * rate / 60);
+  let lo = 0;
+  let hi = timeline.entries.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (timeline.prefix[mid] <= target) lo = mid;
+    else hi = mid - 1;
+  }
+  const index = lo;
+  const entry = timeline.entries[index];
+  const fraction = clamp((target - timeline.prefix[index]) / Math.max(1, entry.weight), 0, 0.999);
+  const engineState = state.engine?.state;
+  const autoplay = engineState === 'playing' || engineState === 'loading';
+  const paused = engineState === 'paused';
+
+  if (state.mode === 'pdf') {
+    if ((state.ttsPage || state.page) === entry.page) {
+      state.timelineEntryIndex = index;
+      return state.engine.seekToSentence(entry.sentenceIndex, fraction);
+    }
+    return startPdfTTS(state, { page: entry.page, start: entry.sentenceIndex, startFraction: fraction, autoplay, paused });
+  }
+
+  if (state.chapterIndex !== entry.chapterIndex) {
+    renderChapter(state, entry.chapterIndex, { ratio: 0, keepDock: true });
+    return startTTS(state, { start: entry.sentenceIndex, startFraction: fraction, autoplay, paused });
+  }
+  state.timelineEntryIndex = index;
+  return state.engine.seekToSentence(entry.sentenceIndex, fraction);
 }
 
 function updateTTSTimeline(state) {
   if (!refs?.ttsSeek) return;
   if (state?.ttsSeeking) return;
-  const progress = state?.engine?.getPlaybackProgress?.();
+  if (state?.mode === 'reflow' && state.book && !state.bookTimeline) buildReflowTimeline(state);
+  const progress = readerTimelineProgress(state);
   if (!progress || !Number.isFinite(progress.duration) || progress.duration <= 0) {
     refs.ttsSeek.disabled = true;
     refs.ttsSeek.value = '0';
     refs.ttsElapsed.textContent = '0:00';
-    refs.ttsDuration.textContent = '0:00';
+    refs.ttsDuration.textContent = state?.mode === 'pdf' && state.pdfTimelinePromise ? '…' : '0:00';
+    updateTTSWordHighlight(state);
     return;
   }
   refs.ttsSeek.disabled = false;
   refs.ttsSeek.value = String(Math.round(1000 * progress.position / progress.duration));
   refs.ttsElapsed.textContent = formatAudioTime(progress.position);
   refs.ttsDuration.textContent = formatAudioTime(progress.duration);
+  updateTTSWordHighlight(state);
 }
 
 function updateMediaSession(state) {

@@ -252,6 +252,35 @@ export class PdfView {
     this.states.forEach(st => { if (st.hlLayer) st.hlLayer.innerHTML = ''; });
   }
 
+  showWordHighlight(sentence, wordIndex) {
+    const st = this.states[(sentence.page || 1) - 1];
+    if (!st?.hlLayer) return;
+    st.hlLayer.querySelectorAll('.pdf-word-hl').forEach(el => el.remove());
+    const word = sentence.words?.[wordIndex];
+    if (!word) return;
+    const pageRect = st.wrap.getBoundingClientRect();
+    for (const part of word.parts || []) {
+      const span = st.itemSpans?.[part.idx];
+      const textNode = span?.firstChild;
+      if (!textNode || textNode.nodeType !== Node.TEXT_NODE) continue;
+      try {
+        const range = document.createRange();
+        range.setStart(textNode, Math.min(part.start, textNode.length));
+        range.setEnd(textNode, Math.min(part.end, textNode.length));
+        for (const rect of range.getClientRects()) {
+          if (!rect.width || !rect.height) continue;
+          const marker = document.createElement('div');
+          marker.className = 'pdf-hl pdf-word-hl';
+          marker.style.left = `${rect.left - pageRect.left}px`;
+          marker.style.top = `${rect.top - pageRect.top}px`;
+          marker.style.width = `${rect.width}px`;
+          marker.style.height = `${rect.height}px`;
+          st.hlLayer.appendChild(marker);
+        }
+      } catch {}
+    }
+  }
+
   _drawHighlight(sentence) {
     const st = this.states[(sentence.page || 1) - 1];
     if (!st?.hlLayer) return;
@@ -465,7 +494,18 @@ function buildPageSentences(items) {
     const itemIdxs = pieces
       .filter(p => p.end > start && p.start < end)
       .map(p => p.idx);
-    sentences.push({ text: trimmed, page: 0, items: itemIdxs });
+    const words = [];
+    const wordRe = /[\p{L}\p{M}\p{N}]+(?:[’'\-][\p{L}\p{M}\p{N}]+)*/gu;
+    let word;
+    while ((word = wordRe.exec(trimmed))) {
+      const wordStart = start + word.index;
+      const wordEnd = wordStart + word[0].length;
+      const parts = pieces
+        .filter(p => p.end > wordStart && p.start < wordEnd)
+        .map(p => ({ idx: p.idx, start: Math.max(0, wordStart - p.start), end: Math.min(p.end, wordEnd) - p.start }));
+      if (parts.length) words.push({ text: word[0], weight: Math.max(1, word[0].length), parts });
+    }
+    sentences.push({ text: trimmed, page: 0, items: itemIdxs, words });
   }
   return sentences;
 }

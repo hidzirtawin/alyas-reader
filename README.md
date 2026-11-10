@@ -28,7 +28,8 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 - **Comics (CBZ / CBR)** — page-by-page viewer with natural page ordering, ComicInfo.xml metadata, first-page covers, a page-number grid, jump-to-page, zoom and swipe/keyboard page turns. CBR support uses a bundled WASM build of libarchive (RAR v4 and v5).
 - **Natural narration** — the full **Piper** catalog: 179 free neural voices across 30+ languages, including American, British, Scottish, Northern/Southern English and Australian accents. Runs locally in the browser — the default is an audiobook-style voice that downloads once in the background.
 - **Silent reading** — switch narration off entirely in Settings or the voice picker. The reader becomes text-only and the Listen controls disappear.
-- **Listen along** — sentence-by-sentence playback with highlighting, auto-scroll, previous/next sentence, speed control, and uninterrupted page/chapter advance until the end of the book, a manual stop, or the sleep timer. Comic pages are images, so narration is unavailable there.
+- **Listen along** — sentence-by-sentence playback with highlighting, auto-scroll, previous/next sentence, speed control, and uninterrupted page/chapter advance until the end of the book, a manual stop, or the sleep timer.
+- **Make an audiobook** — from the book menu, render a whole book or one chapter/page into **MP3 chapter files**, bundled in a zip with an `m3u` playlist and metadata. Uses the selected local Piper voice; no Audible account, DRM or cloud service is involved. Comic pages are images, so narration is unavailable there.
 - **Languages** — books are detected automatically (script and stop-word analysis, plus EPUB/ODT/FB2 metadata). Non-English books use a matching Piper voice when one is available, and hyphenation follows the book’s language.
 - **Dictionary** — select a word and tap **Define**, or double-click it. A public-domain Webster’s 1913 dictionary is stored offline; other languages also get a Wiktionary link.
 - **Move around** — previous/next chapter buttons sit in the reader footer, the chapter label opens contents, and a chapter dropdown jumps straight to any section. Press `G` for PDF/comic page jumps or a chapter-and-position jump.
@@ -181,6 +182,7 @@ public/
 - [Piper](https://github.com/rhasspy/piper) (MIT) — neural text-to-speech engine
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) (MIT) — browser/WASM wrapper and worker runtime
 - [Piper voice models](https://huggingface.co/rhasspy/piper-voices) (MIT) — official voice catalog
+- [lamejs](https://github.com/zhuker/lamejs) (LGPL-3.0) — MP3 encoding for audiobook exports
 - [Australian LibriVox Piper voice](https://huggingface.co/DataCraftsmanAustralia/piper-en_AU-librivox-medium) by DataCraftsmanAustralia (CC-BY-4.0)
 - [VCTK Corpus](https://datashare.ed.ac.uk/handle/10283/2950) (CC BY 4.0) — regional English accent speakers used by the VCTK Piper voice
 - [L2-ARCTIC](https://psi.engr.tamu.edu/l2-arctic-corpus/) (CC BY-NC 4.0) — non-native English accent speakers used by the L2-ARCTIC Piper voice

@@ -17,10 +17,11 @@ import { openBookDetails } from './details.js';
 import { openVoiceModal } from './settings.js';
 import { openDictionary } from './dictionary.js';
 import { getSleepTimer, startSleepTimer, cancelSleepTimer, formatSleepRemaining } from './sleep.js';
+import { createAudiobook, audiobookChapters } from './audiobook.js';
 import { baseLanguage, languageName, languageMatches } from './language.js';
 import {
   $, esc, icon, clamp, debounce, uid, normalizedText,
-  detectSentenceSegments, formatTimeLeft, copyText, isEditable, downloadBlob, rafThrottle,
+  detectSentenceSegments, formatTimeLeft, copyText, isEditable, downloadBlob, formatBytes, rafThrottle,
 } from './util.js';
 
 let S = null;
@@ -183,6 +184,7 @@ export async function openReader(app, bookId, target = {}) {
     else if (state.mode === 'comic') await openComicBook(state);
     else await openReflowBook(state);
     rememberReadingSession(state);
+    if (state.target.audiobook) setTimeout(() => { if (S === state) openAudiobookDialog(state); }, 650);
   } catch (err) {
     console.error('Could not open book', err);
     if (!state.destroyed) showReaderError(state, err.message || 'This book could not be opened.');
@@ -2388,6 +2390,98 @@ function openBookSearch(state) {
   setTimeout(() => input.focus(), 60);
 }
 
+function openAudiobookDialog(state) {
+  if (state.mode === 'comic') {
+    toast('Comic pages are images, so there is no text to turn into an audiobook.', 'info');
+    return;
+  }
+  const tts = getPrefs().tts;
+  const voice = piperVoiceById(tts.piperVoice);
+  const speaker = piperSpeakerName(voice, tts.piperSpeaker);
+  const whole = audiobookChapters(state, 'book');
+  const single = audiobookChapters(state, 'chapter');
+  if (!whole.length) { toast('No readable text was found for an audiobook.', 'err'); return; }
+  const body = document.createElement('div');
+  const chapterTitle = state.mode === 'pdf' ? `Page ${state.page || 1}` : (single[0]?.title || 'This chapter');
+  const estimate = scope => {
+    const words = scope === 'chapter'
+      ? (state.mode === 'pdf' ? 250 : (state.chapter?.words || 0))
+      : (state.mode === 'pdf' ? (state.numPages || 1) * 250 : (state.book?.words || 0));
+    const minutes = Math.max(1, Math.round(words / 160));
+    return `About ${minutes} min of audio · ${scope === 'chapter' ? 1 : whole.length} chapter${(scope === 'chapter' ? 1 : whole.length) === 1 ? '' : 's'} · MP3`;
+  };
+  body.innerHTML = `
+    <div class="audiobook-card">
+      <div class="audiobook-voice">${icon('loudhailer')}<span>Default voice: <strong>${esc(voice.name)}${speaker ? ` · ${esc(speaker)}` : ''}</strong></span></div>
+      <div class="field" style="margin-top:12px">
+        <label for="audioScope">Export</label>
+        <select class="select" id="audioScope">
+          <option value="book">Whole book · ${whole.length} chapter${whole.length === 1 ? '' : 's'}</option>
+          <option value="chapter">${state.mode === 'pdf' ? 'This page' : 'This chapter'} · ${esc(chapterTitle)}</option>
+        </select>
+      </div>
+      <div class="audiobook-estimate" id="audioEstimate">${estimate('book')}</div>
+      <p class="hint">Piper runs on your device. A full book can take hours; you can cancel at any time. The download is a zip of MP3 chapters with a playlist.</p>
+    </div>`;
+  const foot = document.createElement('div');
+  foot.innerHTML = '<button class="btn" data-cancel>Cancel</button><button class="btn btn-primary" data-start-audio>Create audiobook</button>';
+  const m = modal({ eyebrow: 'Audiobook', title: 'Make an audiobook', body, foot, wide: true });
+  const scopeSelect = body.querySelector('#audioScope');
+  scopeSelect.addEventListener('change', () => {
+    body.querySelector('#audioEstimate').textContent = estimate(scopeSelect.value);
+  });
+  foot.querySelector('[data-cancel]').onclick = () => m.close('cancel');
+  foot.querySelector('[data-start-audio]').onclick = () => {
+    const scope = scopeSelect.value;
+    m.close('start');
+    window.lumen?.pauseTTS?.();
+    const progress = modal({
+      eyebrow: 'Audiobook',
+      title: 'Creating audiobook',
+      body: '<div class="backup-status"><div class="backup-pct" id="audioPct">0%</div><p id="audioStatus">Preparing the first chapter…</p><button class="btn btn-sm" data-cancel-audio style="margin-top:14px">Cancel</button></div>',
+      dismissible: false,
+    });
+    const token = { cancelled: false };
+    const pct = progress.bodyEl.querySelector('#audioPct');
+    const status = progress.bodyEl.querySelector('#audioStatus');
+    progress.bodyEl.querySelector('[data-cancel-audio]').onclick = () => {
+      token.cancelled = true;
+      progress.close('cancel');
+      toast('Audiobook creation cancelled', 'info');
+    };
+    createAudiobook(state, {
+      scope,
+      token,
+      onProgress: p => {
+        if (token.cancelled) return;
+        if (pct) pct.textContent = `${p.percent || 0}%`;
+        if (status) {
+          status.textContent = p.phase === 'packing'
+            ? 'Packing MP3 chapters into a zip…'
+            : `Chapter ${p.chapter || 1} of ${p.chapters || 1}${p.sentences ? ` · sentence ${p.sentence} of ${p.sentences}` : ''}`;
+        }
+      },
+    }).then(result => {
+      progress.close('done');
+      const done = modal({
+        eyebrow: 'Audiobook',
+        title: 'Audiobook ready',
+        body: `<p class="hint" style="margin-bottom:12px">${result.chapters} chapter${result.chapters === 1 ? '' : 's'} · ${formatBytes(result.blob.size)} · MP3 + playlist</p>
+          <p class="hint">Save the zip and unzip it into your audiobook player. The playlist keeps chapter order.</p>`,
+        foot: `<button class="btn btn-primary" data-download-audiobook>${icon('download')} Download audiobook</button>`,
+      });
+      done.footEl.querySelector('[data-download-audiobook]').onclick = () => {
+        downloadBlob(result.blob, result.filename);
+        done.close('download');
+        toast('Audiobook downloaded', 'ok');
+      };
+    }).catch(err => {
+      if (!token.cancelled) progress.close('error');
+      if (!token.cancelled) toast(err.message || 'Could not create the audiobook.', 'err');
+    });
+  };
+}
+
 function openSleepDialog(state) {
   const active = getSleepTimer();
   const body = document.createElement('div');
@@ -2472,6 +2566,7 @@ function openMoreMenu(state) {
   contextMenu(rect.right - 8, rect.bottom + 8, [
     { label: 'Go to page…', icon: 'list', onSelect: () => openGoTo(state) },
     ...(state.mode !== 'comic' ? [{ label: 'Search in book…', icon: 'search', onSelect: () => openBookSearch(state) }] : []),
+    ...(state.mode !== 'comic' ? [{ label: 'Make audiobook…', icon: 'loudhailer', onSelect: () => openAudiobookDialog(state) }] : []),
     {
       label: getSleepTimer() ? `Sleep timer · ${formatSleepRemaining(getSleepTimer().remainingMs)}` : 'Sleep timer…',
       icon: 'moon',

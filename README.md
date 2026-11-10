@@ -28,7 +28,7 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 - **Comics (CBZ / CBR)** — page-by-page viewer with natural page ordering, ComicInfo.xml metadata, first-page covers, a page-number grid, jump-to-page, zoom and swipe/keyboard page turns. CBR support uses a bundled WASM build of libarchive (RAR v4 and v5).
 - **Natural narration** — the full **Piper** catalog: 179 free neural voices across 30+ languages, including American, British, Scottish, Northern/Southern English and Australian accents. Runs locally in the browser — the default is an audiobook-style voice that downloads once in the background.
 - **Silent reading** — switch narration off entirely in Settings or the voice picker. The reader becomes text-only and the Listen controls disappear.
-- **Listen along** — sentence-by-sentence playback with highlighting, auto-scroll, previous/next sentence, speed control, and uninterrupted page/chapter advance until the end of the book, a manual stop, or the sleep timer.
+- **Listen along** — sentence-by-sentence playback with highlighting, auto-scroll, previous/next sentence, fine-grained speed control, and a seek bar for the current chapter/page. Narration continues across pages and chapters until the book ends, playback is manually stopped, or the sleep timer expires.
 - **Make an audiobook** — from the book menu, render a whole book or one chapter/page into **MP3 chapter files**, bundled in a zip with an `m3u` playlist and metadata. Choose any Piper voice and speaker for the export, independent of your reading voice, and preview the sample before starting. No Audible account, DRM or cloud service is involved. Comic pages are images, so narration is unavailable there.
 - **Languages** — books are detected automatically (script and stop-word analysis, plus EPUB/ODT/FB2 metadata). Non-English books use a matching Piper voice when one is available, and hyphenation follows the book’s language.
 - **Dictionary** — select a word and tap **Define**, or double-click it. A public-domain Webster’s 1913 dictionary is stored offline; other languages also get a Wiktionary link.
@@ -58,7 +58,7 @@ Alya’s Reader runs [Piper](https://github.com/rhasspy/piper) (MIT) entirely in
 - **179 voices** across 30+ languages
 - American, British, Scottish, Northern English, Southern English and **Australian** accents
 - Multi-speaker models with a searchable, expandable speaker browser
-- Adjustable speed and a **pause-between-sentences** control for natural reading rhythm
+- Adjustable 0.5×–2× speed and a **pause-between-sentences** control for natural reading rhythm
 - A live **download progress bar** (percent and megabytes) in the voice picker and the reading dock
 - The full **LibriVox (LibriTTS)** catalog exposes all **2,306 speakers** in a searchable list — browse 60 at a time or search by name/number
 - The voice/speaker you pick appears in a visible chip in the reader header; tap it to change voices

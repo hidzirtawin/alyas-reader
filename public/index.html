@@ -185,18 +185,30 @@
   </div>
 
   <div class="tts-dock" id="ttsDock" hidden>
-    <span class="tts-percent" id="ttsPercent" hidden></span>
-    <div class="tts-eq" id="ttsEq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
-    <button class="icon-btn" data-tts="prev" title="Previous sentence" aria-label="Previous sentence"><svg><use href="#i-prev"/></svg></button>
-    <button class="tts-play" data-tts="toggle" title="Play / pause" aria-label="Play or pause"><svg><use href="#i-loudhailer"/></svg></button>
-    <button class="icon-btn" data-tts="next" title="Next sentence" aria-label="Next sentence"><svg><use href="#i-next"/></svg></button>
-    <div class="tts-info">
-      <span id="ttsVoiceLabel" class="tts-voice">Piper voice</span>
-      <span id="ttsPos" class="tts-pos">—</span>
+    <div class="tts-scrub-row">
+      <span id="ttsElapsed" class="tts-time">0:00</span>
+      <input id="ttsSeek" class="tts-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Seek through this chapter or page" disabled>
+      <span id="ttsDuration" class="tts-time">0:00</span>
     </div>
-    <button class="tts-chip" data-tts="speed" title="Playback speed" id="ttsSpeedBtn">1.0×</button>
-    <button class="icon-btn" data-tts="settings" title="Voice settings" aria-label="Voice settings"><svg><use href="#i-sliders"/></svg></button>
-    <button class="icon-btn tts-close" data-tts="close" title="Stop listening" aria-label="Stop listening"><svg><use href="#i-x"/></svg></button>
+    <div class="tts-controls">
+      <span class="tts-percent" id="ttsPercent" hidden></span>
+      <div class="tts-eq" id="ttsEq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <button class="icon-btn" data-tts="prev" title="Previous sentence" aria-label="Previous sentence"><svg><use href="#i-prev"/></svg></button>
+      <button class="tts-play" data-tts="toggle" title="Play / pause" aria-label="Play or pause"><svg><use href="#i-loudhailer"/></svg></button>
+      <button class="icon-btn" data-tts="next" title="Next sentence" aria-label="Next sentence"><svg><use href="#i-next"/></svg></button>
+      <div class="tts-info">
+        <span id="ttsVoiceLabel" class="tts-voice">Piper voice</span>
+        <span id="ttsPos" class="tts-pos">—</span>
+      </div>
+      <button class="tts-chip" data-tts="speed" title="Adjust playback speed" id="ttsSpeedBtn" aria-expanded="false">1.0×</button>
+      <button class="icon-btn" data-tts="settings" title="Voice settings" aria-label="Voice settings"><svg><use href="#i-sliders"/></svg></button>
+      <button class="icon-btn tts-close" data-tts="close" title="Stop listening" aria-label="Stop listening"><svg><use href="#i-x"/></svg></button>
+    </div>
+    <div class="tts-speed-panel" id="ttsSpeedPanel" hidden>
+      <label for="ttsSpeedRange">Playback speed <output id="ttsSpeedValue">1.0×</output></label>
+      <input id="ttsSpeedRange" type="range" min="0.5" max="2" step="0.01" value="1" aria-label="Playback speed">
+      <div class="tts-speed-ends"><span>0.5×</span><span>2×</span></div>
+    </div>
   </div>
 
   <aside class="drawer" id="tocDrawer" aria-hidden="true" aria-label="Contents">

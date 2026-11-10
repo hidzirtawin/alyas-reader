@@ -2,7 +2,7 @@
 
 import { db } from './db.js';
 import {
-  getPrefs, setReaderPrefs, savePrefs, cycleSpeed, DEFAULT_READER,
+  getPrefs, setReaderPrefs, savePrefs, DEFAULT_READER,
   FONTS, THEMES, DYSLEXIA_READER,
 } from './prefs.js';
 import { buildReflowable, buildComicBook, isComicFormat } from './renderers.js';
@@ -200,6 +200,8 @@ export async function closeReader({ skipReload = false, skipSave = false } = {})
   state.destroyed = true;
   S = null;
   if (state.app) state.app.reader = null;
+  clearInterval(state.ttsUiTimer);
+  state.ttsUiTimer = null;
   state.queueSave?.cancel?.();
   try { closeAllModals(); } catch {}
   try { state.cleanup.forEach(fn => fn()); } catch {}
@@ -228,6 +230,12 @@ export async function closeReader({ skipReload = false, skipSave = false } = {})
     refs.selBar.hidden = true;
     refs.ttsDock.classList.remove('is-open');
     refs.ttsDock.hidden = true;
+    refs.ttsSpeedPanel.hidden = true;
+    refs.ttsSpeedBtn.setAttribute('aria-expanded', 'false');
+    refs.ttsSeek.disabled = true;
+    refs.ttsSeek.value = '0';
+    refs.ttsElapsed.textContent = '0:00';
+    refs.ttsDuration.textContent = '0:00';
     refs.ttsBtn.classList.remove('is-live');
     refs.ttsBtn.querySelector('span').textContent = 'Listen';
     refs.ttsEq.classList.remove('is-live');
@@ -270,6 +278,12 @@ function getRefs() {
     ttsVoiceLabel: $('#ttsVoiceLabel'),
     ttsPos: $('#ttsPos'),
     ttsSpeedBtn: $('#ttsSpeedBtn'),
+    ttsSpeedPanel: $('#ttsSpeedPanel'),
+    ttsSpeedRange: $('#ttsSpeedRange'),
+    ttsSpeedValue: $('#ttsSpeedValue'),
+    ttsSeek: $('#ttsSeek'),
+    ttsElapsed: $('#ttsElapsed'),
+    ttsDuration: $('#ttsDuration'),
     tocDrawer: $('#tocDrawer'),
     tocScrim: $('#tocScrim'),
     tocTitle: $('#tocTitle'),
@@ -293,10 +307,17 @@ function resetReaderUI(state) {
   refs.selBar.hidden = true;
   refs.ttsDock.classList.remove('is-open');
   refs.ttsDock.hidden = true;
+  refs.ttsSpeedPanel.hidden = true;
+  refs.ttsSpeedBtn.setAttribute('aria-expanded', 'false');
+  clearInterval(state.ttsUiTimer);
+  state.ttsUiTimer = null;
+  state.ttsSeeking = false;
+  state.ttsSeekRequested = null;
   refs.ttsBtn.classList.remove('is-live');
   refs.ttsBtn.querySelector('span').textContent = 'Listen';
   refs.ttsEq.classList.remove('is-live');
   refs.ttsPos.textContent = '—';
+  updateTTSTimeline(state);
   if (refs.ttsPercent) refs.ttsPercent.hidden = true;
   refs.progressFill.style.width = '0%';
   refs.footLeft.textContent = '';
@@ -379,6 +400,39 @@ function wireEvents(state) {
     if (!btn) return;
     handleDockAction(state, btn.dataset.tts);
   };
+
+  refs.ttsSpeedRange.addEventListener('input', () => {
+    state.engine?.setRate(Number(refs.ttsSpeedRange.value));
+    updateSpeedLabel();
+  });
+  refs.ttsSeek.addEventListener('input', () => {
+    state.ttsSeeking = true;
+    state.ttsSeekRequested = Number(refs.ttsSeek.value);
+    const progress = state.engine?.getPlaybackProgress?.();
+    if (!progress) return;
+    refs.ttsElapsed.textContent = formatAudioTime(progress.duration * state.ttsSeekRequested / 1000);
+  });
+  refs.ttsSeek.addEventListener('change', () => {
+    const progress = state.engine?.getPlaybackProgress?.();
+    const requested = Number.isFinite(state.ttsSeekRequested) ? state.ttsSeekRequested : Number(refs.ttsSeek.value);
+    if (progress) state.engine.seekPlayback(progress.duration * requested / 1000);
+    state.ttsSeekRequested = null;
+    state.ttsSeeking = false;
+    state.ttsSeekRequested = null;
+    updateTTSTimeline(state);
+  });
+  refs.ttsSeek.addEventListener('pointercancel', () => {
+    state.ttsSeeking = false;
+    updateTTSTimeline(state);
+  });
+
+  const closeSpeedPanel = e => {
+    if (refs.ttsSpeedPanel.hidden || refs.ttsSpeedPanel.contains(e.target) || refs.ttsSpeedBtn.contains(e.target)) return;
+    refs.ttsSpeedPanel.hidden = true;
+    refs.ttsSpeedBtn.setAttribute('aria-expanded', 'false');
+  };
+  document.addEventListener('pointerdown', closeSpeedPanel, true);
+  state.cleanup.push(() => document.removeEventListener('pointerdown', closeSpeedPanel, true));
 
   refs.tocList.onclick = e => handleTocClick(state, e);
   refs.tocList.onsubmit = e => {
@@ -1325,6 +1379,8 @@ function openDock(state) {
   refs.ttsDock.classList.add('is-open');
   refs.ttsBtn.classList.add('is-live');
   refs.ttsBtn.querySelector('span').textContent = 'Listening';
+  if (!state.ttsUiTimer) state.ttsUiTimer = setInterval(() => updateTTSTimeline(state), 200);
+  updateTTSTimeline(state);
   updateVoiceLabel(state);
   updateSpeedLabel();
 }
@@ -1335,6 +1391,10 @@ function closeTTS(state, { hideDock = true } = {}) {
   state.ttsPage = null;
   state.ttsAdvancing = false;
   if (hideDock) {
+    clearInterval(state.ttsUiTimer);
+    state.ttsUiTimer = null;
+    refs.ttsSpeedPanel.hidden = true;
+    refs.ttsSpeedBtn.setAttribute('aria-expanded', 'false');
     refs.ttsDock.classList.remove('is-open');
     refs.ttsEq.classList.remove('is-live');
     refs.ttsBtn.classList.remove('is-live');
@@ -1666,8 +1726,9 @@ function handleDockAction(state, action) {
   if (action === 'prev') { state.engine.prev(); return; }
   if (action === 'next') { state.engine.next(); return; }
   if (action === 'speed') {
-    const next = cycleSpeed(getPrefs().tts.rate);
-    state.engine.setRate(next);
+    refs.ttsSpeedPanel.hidden = !refs.ttsSpeedPanel.hidden;
+    refs.ttsSpeedBtn.setAttribute('aria-expanded', String(!refs.ttsSpeedPanel.hidden));
+    refs.ttsSpeedRange.value = String(getPrefs().tts.rate);
     updateSpeedLabel();
     return;
   }
@@ -1715,11 +1776,37 @@ function updateReaderVoiceChip(state) {
 
 function updateSpeedLabel() {
   if (!refs) return;
-  refs.ttsSpeedBtn.textContent = formatSpeed(getPrefs().tts.rate);
+  const label = formatSpeed(getPrefs().tts.rate);
+  refs.ttsSpeedBtn.textContent = label;
+  refs.ttsSpeedRange.value = String(getPrefs().tts.rate);
+  refs.ttsSpeedValue.textContent = label;
 }
 
 function formatSpeed(n) {
   return `${Number(Number(n).toFixed(2))}×`;
+}
+
+function formatAudioTime(seconds) {
+  const value = Math.max(0, Math.floor(Number(seconds) || 0));
+  const minutes = Math.floor(value / 60);
+  return `${minutes}:${String(value % 60).padStart(2, '0')}`;
+}
+
+function updateTTSTimeline(state) {
+  if (!refs?.ttsSeek) return;
+  if (state?.ttsSeeking) return;
+  const progress = state?.engine?.getPlaybackProgress?.();
+  if (!progress || !Number.isFinite(progress.duration) || progress.duration <= 0) {
+    refs.ttsSeek.disabled = true;
+    refs.ttsSeek.value = '0';
+    refs.ttsElapsed.textContent = '0:00';
+    refs.ttsDuration.textContent = '0:00';
+    return;
+  }
+  refs.ttsSeek.disabled = false;
+  refs.ttsSeek.value = String(Math.round(1000 * progress.position / progress.duration));
+  refs.ttsElapsed.textContent = formatAudioTime(progress.position);
+  refs.ttsDuration.textContent = formatAudioTime(progress.duration);
 }
 
 function updateMediaSession(state) {

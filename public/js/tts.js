@@ -759,6 +759,8 @@ export class SpeechEngine {
     this.onError = onError || (() => {});
 
     this.sentences = [];
+    this._timelineWords = [];
+    this._timelinePrefix = [0];
     this.index = 0;
     this.state = 'idle'; // idle | loading | playing | paused
     this._chunks = [];
@@ -775,6 +777,9 @@ export class SpeechEngine {
     this._audioOffset = 0;
     this._audioStartedAt = 0;
     this._audioRate = 1;
+    this._seekFraction = null;
+    this._chunkSeekFraction = null;
+    this._completed = false;
     this._stalledAt = 0;
     this._pendingAdvance = null;
     this._retryTimer = null;
@@ -863,6 +868,12 @@ export class SpeechEngine {
     this._invalidate();
     this._wantPlaying = false;
     this.sentences = sentences;
+    this._timelineWords = sentences.map(sentence => Math.max(1, String(sentence?.text || '').trim().split(/\s+/).filter(Boolean).length));
+    this._timelinePrefix = [0];
+    for (const count of this._timelineWords) this._timelinePrefix.push(this._timelinePrefix.at(-1) + count);
+    this._seekFraction = null;
+    this._chunkSeekFraction = null;
+    this._completed = false;
     this.index = Math.max(0, Math.min(start, sentences.length - 1));
     this._setState('idle');
     if (autoplay && sentences.length) this.play();
@@ -958,18 +969,24 @@ export class SpeechEngine {
 
   next() {
     if (!this.sentences.length) return;
+    this._seekFraction = null;
+    this._chunkSeekFraction = null;
     const wasPlaying = this.state === 'playing' || this.state === 'loading';
     this._startSentence(Math.min(this.index + 1, this.sentences.length - 1), { autoplay: wasPlaying });
   }
 
   prev() {
     if (!this.sentences.length) return;
+    this._seekFraction = null;
+    this._chunkSeekFraction = null;
     const wasPlaying = this.state === 'playing' || this.state === 'loading';
     this._startSentence(Math.max(0, this.index - 1), { autoplay: wasPlaying });
   }
 
   restart() {
     if (!this.sentences.length) return;
+    this._seekFraction = null;
+    this._chunkSeekFraction = null;
     const wasActive = this.state === 'playing' || this.state === 'loading' || this.state === 'paused';
     this._invalidate();
     this._startSentence(this.index, { autoplay: wasActive });
@@ -984,6 +1001,63 @@ export class SpeechEngine {
     if (this.provider !== 'system' && this._audio) {
       try { this._audio.playbackRate = r; } catch {}
     }
+  }
+
+  getPlaybackProgress() {
+    if (!this.sentences.length) return null;
+    const rate = clampNum(getPrefs().tts.rate, 0.5, 2);
+    const secondsPerWord = 60 / (160 * rate);
+    const totalWords = this._timelinePrefix.at(-1) || 0;
+    if (!totalWords) return null;
+    if (this._completed) {
+      const duration = totalWords * secondsPerWord;
+      return { position: duration, duration };
+    }
+    const clip = this._getClipProgress();
+    const before = this._timelinePrefix[this.index] || 0;
+    const currentWords = this._timelineWords[this.index] || 1;
+    const fraction = clip
+      ? clip.position / clip.duration
+      : (this._chunkSeekFraction ?? this._seekFraction ?? 0);
+    return {
+      position: (before + currentWords * fraction) * secondsPerWord,
+      duration: totalWords * secondsPerWord,
+    };
+  }
+
+  _getClipProgress() {
+    if (this._audioBuffer && sharedAudioCtx) {
+      let position = this._audioOffset;
+      if (this._audioSource && sharedAudioCtx.state === 'running') {
+        position += Math.max(0, sharedAudioCtx.currentTime - this._audioStartedAt) * this._audioRate;
+      }
+      return { position: Math.min(position, this._audioBuffer.duration), duration: this._audioBuffer.duration };
+    }
+    if (this._audio && Number.isFinite(this._audio.duration) && this._audio.duration > 0) {
+      return { position: this._audio.currentTime || 0, duration: this._audio.duration };
+    }
+    return null;
+  }
+
+  seekPlayback(seconds) {
+    const progress = this.getPlaybackProgress();
+    if (!progress) return false;
+    const ttsRate = clampNum(getPrefs().tts.rate, 0.5, 2);
+    let targetWords = clampNum(seconds, 0, progress.duration) * (160 * ttsRate / 60);
+    let sentenceIndex = 0;
+    while (sentenceIndex < this._timelineWords.length - 1 && targetWords >= this._timelineWords[sentenceIndex]) {
+      targetWords -= this._timelineWords[sentenceIndex];
+      sentenceIndex++;
+    }
+    const sentenceWords = this._timelineWords[sentenceIndex] || 1;
+    const fraction = clampNum(targetWords / sentenceWords, 0, 0.999);
+    const wasPlaying = this.state === 'playing' || this.state === 'loading';
+    const wasPaused = this.state === 'paused';
+    this._seekFraction = fraction;
+    this._completed = false;
+    this._startSentence(sentenceIndex, { autoplay: wasPlaying, silent: !wasPlaying });
+    if (wasPaused) this._setState('paused');
+    return true;
   }
 
   setVoiceOverride(voice) {
@@ -1016,6 +1090,7 @@ export class SpeechEngine {
   _startSentence(i, { autoplay = true, silent = false } = {}) {
     if (!this.sentences[i]) return;
     this._invalidate();
+    this._completed = false;
     this.index = i;
     const sentence = this.sentences[i];
     this.onSentence(sentence, i, { silent });
@@ -1023,10 +1098,21 @@ export class SpeechEngine {
 
     const text = cleanForSpeech(sentence.text);
     this._wantPlaying = true;
-    if (!text) { this._advanceSentence(); return; }
+    if (!text) {
+      this._seekFraction = null;
+      this._advanceSentence();
+      return;
+    }
 
     this._chunks = splitLongText(text, this.provider === 'piper' ? 800 : 240);
-    this._chunkIndex = 0;
+    const seekFraction = this._seekFraction;
+    this._seekFraction = null;
+    this._chunkIndex = seekFraction == null || this.provider === 'system'
+      ? 0
+      : Math.min(this._chunks.length - 1, Math.floor(seekFraction * this._chunks.length));
+    this._chunkSeekFraction = seekFraction == null || this.provider === 'system'
+      ? null
+      : seekFraction * this._chunks.length - this._chunkIndex;
     this._setPlaying();
     this._speakChunk();
     this._prefetch(i);
@@ -1100,6 +1186,8 @@ export class SpeechEngine {
 
     const prefs = getPrefs().tts;
     const audio = this._audioEl || new Audio();
+    const seekFraction = this._chunkSeekFraction;
+    this._chunkSeekFraction = null;
     try { audio.setAttribute('playsinline', ''); } catch {}
     audio.src = entry.url;
     this._audio = audio;
@@ -1107,6 +1195,13 @@ export class SpeechEngine {
     audio.volume = clampNum(prefs.volume ?? 0.9, 0, 1);
     audio.playbackRate = clampNum(prefs.rate, 0.5, 2);
     audio.preservesPitch = true;
+    if (seekFraction != null && seekFraction > 0) {
+      const seekWhenReady = () => {
+        if (Number.isFinite(audio.duration) && audio.duration > 0) audio.currentTime = audio.duration * seekFraction;
+      };
+      if (Number.isFinite(audio.duration) && audio.duration > 0) seekWhenReady();
+      else audio.addEventListener('loadedmetadata', seekWhenReady, { once: true });
+    }
     audio.onended = () => {
       if (token !== this._token) return;
       this._audio = null;
@@ -1153,11 +1248,14 @@ export class SpeechEngine {
     if (ctx.state !== 'running') {
       try { await ctx.resume(); } catch {}
     }
+    const seekFraction = this._chunkSeekFraction;
+    this._chunkSeekFraction = null;
+    const offset = seekFraction == null ? 0 : buffer.duration * seekFraction;
     this._audio = null;
     this._stalledAt = 0;
     this._chunkStartedAt = 0;
     this._errorStreak = 0;
-    this._playBufferSource(buffer, 0, token);
+    this._playBufferSource(buffer, offset, token);
     this._startKeepAlive();
     this._setState('playing');
     this._requestWakeLock();
@@ -1264,6 +1362,7 @@ export class SpeechEngine {
   _advanceSentence() {
     if (this.index + 1 >= this.sentences.length) {
       this._token++;
+      this._completed = true;
       // Keep the intent alive across the chapter hand-off; the reader stops
       // the engine explicitly when the book itself is finished.
       this._stopKeepAlive();

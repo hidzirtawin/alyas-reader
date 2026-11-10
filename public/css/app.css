@@ -979,10 +979,11 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
 .tts-dock {
   position: fixed; z-index: 75; left: 50%; bottom: 34px;
   transform: translate(-50%, 18px);
-  display: flex; align-items: center; gap: 3px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+  width: min(94vw, 680px);
   max-width: min(94vw, 680px);
-  padding: 7px 9px 7px 14px;
-  border-radius: 999px;
+  padding: 7px 12px 8px;
+  border-radius: 18px;
   background: #1d1913;
   color: #f4ecdd;
   box-shadow: 0 22px 48px -18px rgba(10, 7, 4, .65), 0 2px 8px rgba(10, 7, 4, .3), inset 0 1px 0 rgba(255,255,255,.07);
@@ -991,6 +992,16 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
   transition: opacity .25s, transform .25s var(--ease);
 }
 .tts-dock.is-open { opacity: 1; pointer-events: auto; transform: translate(-50%, 0); }
+.tts-scrub-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; align-items: center; gap: 8px; min-height: 20px; }
+.tts-time { color: #b9ae9c; font-size: 9px; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: center; }
+.tts-seek, .tts-speed-panel input[type="range"] { width: 100%; height: 18px; margin: 0; accent-color: var(--accent-2); cursor: pointer; touch-action: pan-y; }
+.tts-seek:disabled { opacity: .4; cursor: default; }
+.tts-controls { display: flex; align-items: center; justify-content: center; gap: 3px; min-width: 0; }
+.tts-speed-panel { position: absolute; right: 76px; bottom: calc(100% + 9px); width: min(260px, calc(100vw - 36px)); padding: 13px 15px 10px; border: 1px solid rgba(255,255,255,.12); border-radius: 14px; color: #f4ecdd; background: #211c15; box-shadow: 0 12px 30px rgba(10,7,4,.35); }
+.tts-speed-panel[hidden] { display: none; }
+.tts-speed-panel label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 11px; font-weight: 600; }
+.tts-speed-panel output { color: #f1bd78; font-variant-numeric: tabular-nums; }
+.tts-speed-ends { display: flex; justify-content: space-between; color: #a89d8b; font-size: 9px; margin-top: 1px; }
 .tts-percent {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 38px; padding: 3px 7px; border-radius: 999px; flex: none;
@@ -1607,11 +1618,16 @@ kbd { font-family: var(--font-ui); font-size: 10px; font-weight: 600; min-width:
   .reader-stage { padding: 34px 20px 150px; }
   .chapter-head h1 { font-size: calc(var(--reader-size) * 1.55); }
   .reader-foot { padding: 0 14px 6px; }
-  .tts-dock { bottom: 24px; padding: 6px 7px; gap: 0; width: calc(100vw - 24px); max-width: none; justify-content: center; }
-  .tts-eq, .tts-info { display: none; }
+  .tts-dock { bottom: 24px; padding: 6px 9px 7px; gap: 2px; width: calc(100vw - 24px); max-width: none; }
+  .tts-scrub-row { grid-template-columns: 32px minmax(0, 1fr) 32px; gap: 6px; }
+  .tts-eq { display: none; }
+  .tts-info { padding: 0 5px; flex: 1; }
+  .tts-voice { display: none; }
+  .tts-pos { font-size: 9px; }
   .tts-dock .icon-btn { width: 32px; height: 32px; }
-  .tts-chip { margin-left: 2px; }
+  .tts-chip { margin-left: 2px; padding: 0 8px; }
   .tts-close { margin-left: 0; }
+  .tts-speed-panel { right: 54px; }
   .drawer { width: min(340px, 90vw); }
   .popover { top: auto; bottom: 0; right: 0; left: 0; width: 100%; max-height: 78dvh; border-radius: 20px 20px 0 0; animation: sheet .28s var(--ease) both; }
   .toc-item { padding-top: 11px; padding-bottom: 11px; }

@@ -25,7 +25,7 @@ export const THEMES = [
   { id: 'black', name: 'Black', sw: 'sw-black' },
 ];
 
-export const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+export const SPEEDS = [0.5, 0.75, 0.9, 1, 1.25, 1.5, 1.75, 2];
 
 const DEFAULTS = {
   theme: 'paper',

@@ -8,7 +8,7 @@ import {
 import { buildReflowable, buildComicBook, isComicFormat } from './renderers.js';
 import { PdfView } from './pdfview.js';
 import { ComicView } from './comicview.js';
-import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName, getPiperVoices } from './tts.js';
+import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName, getPiperVoices, previewSpeech, stopPreview } from './tts.js';
 import {
   toast, modal, confirmDialog, contextMenu, closeAllModals, shortcutsModal,
   formatLabel, isModalOpen,
@@ -2423,6 +2423,10 @@ function openAudiobookDialog(state) {
         <p class="hint" id="audioVoiceNote"></p>
       </div>
       <div id="audioSpeakerWrap"></div>
+      <div class="audiobook-test">
+        <button class="btn btn-sm" id="audioTestVoice" type="button">${icon('loudhailer')} Test voice</button>
+        <span class="hint" id="audioTestStatus"></span>
+      </div>
       <div class="field" style="margin-top:12px">
         <label for="audioScope">Export</label>
         <select class="select" id="audioScope">
@@ -2490,9 +2494,38 @@ function openAudiobookDialog(state) {
   renderSpeakers();
   voiceNote();
 
+  const testBtn = body.querySelector('#audioTestVoice');
+  const testStatus = body.querySelector('#audioTestStatus');
+  testBtn.addEventListener('click', async () => {
+    const old = testBtn.innerHTML;
+    testBtn.disabled = true;
+    testBtn.innerHTML = '<span class="busy-dot"></span> Preparing…';
+    if (testStatus) testStatus.textContent = '';
+    const stopProgress = onPiperProgress(p => {
+      if (testStatus && (p.phase === 'downloading' || p.phase === 'preparing')) testStatus.textContent = piperProgressLabel(p);
+    });
+    try {
+      await previewSpeech({
+        ...getPrefs().tts,
+        enabled: true,
+        provider: 'piper',
+        piperVoice: audioVoiceId,
+        piperSpeaker: audioSpeaker,
+      }, 'This is how your audiobook will sound — warm, clear, and unhurried.');
+      if (testStatus) testStatus.textContent = 'Playing sample…';
+      setTimeout(() => { if (testStatus?.textContent === 'Playing sample…') testStatus.textContent = ''; }, 4000);
+    } catch (err) {
+      toast(err.message || 'Could not play that voice sample.', 'err');
+    } finally {
+      stopProgress();
+      testBtn.disabled = false;
+      testBtn.innerHTML = old;
+    }
+  });
+
   const foot = document.createElement('div');
   foot.innerHTML = '<button class="btn" data-cancel>Cancel</button><button class="btn btn-primary" data-start-audio>Create audiobook</button>';
-  const m = modal({ eyebrow: 'Audiobook', title: 'Make an audiobook', body, foot, wide: true });
+  const m = modal({ eyebrow: 'Audiobook', title: 'Make an audiobook', body, foot, wide: true, onClose: () => stopPreview() });
   const scopeSelect = body.querySelector('#audioScope');
   scopeSelect.addEventListener('change', () => {
     body.querySelector('#audioEstimate').textContent = estimate(scopeSelect.value);

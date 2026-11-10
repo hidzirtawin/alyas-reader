@@ -1259,8 +1259,6 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
 .audiobook-voice svg { width: 18px; height: 18px; color: var(--accent); flex: none; }
 .audiobook-voice strong { color: var(--ink); font-weight: 600; }
 .audiobook-estimate { margin-top: 12px; font-size: 11px; color: var(--ink-2); }
-.audiobook-test { display: flex; align-items: center; gap: 9px; margin-top: 10px; flex-wrap: wrap; }
-.audiobook-test .hint { margin: 0; }
 
 /* Collections & backup */
 .collection-bar {

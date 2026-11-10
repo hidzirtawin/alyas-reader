@@ -2422,10 +2422,6 @@ function openAudiobookDialog(state) {
         </select>
         <p class="hint" id="audioVoiceNote"></p>
       </div>
-      <div class="audiobook-test">
-        <button class="btn btn-sm" id="audioTestVoice" type="button">${icon('loudhailer')} Test voice</button>
-        <span class="hint" id="audioTestStatus"></span>
-      </div>
       <div id="audioSpeakerWrap"></div>
       <div class="field" style="margin-top:12px">
         <label for="audioScope">Export</label>
@@ -2494,15 +2490,20 @@ function openAudiobookDialog(state) {
   renderSpeakers();
   voiceNote();
 
-  const testBtn = body.querySelector('#audioTestVoice');
-  const testStatus = body.querySelector('#audioTestStatus');
+  const foot = document.createElement('div');
+  foot.style.flexWrap = 'wrap';
+  foot.innerHTML = `<button class="btn" data-cancel>Cancel</button><button class="btn" data-test-voice type="button">${icon('loudhailer')} Test voice</button><button class="btn btn-primary" data-start-audio>Create audiobook</button>`;
+  const m = modal({ eyebrow: 'Audiobook', title: 'Make an audiobook', body, foot, wide: true, onClose: () => stopPreview() });
+
+  const testBtn = foot.querySelector('[data-test-voice]');
   testBtn.addEventListener('click', async () => {
     const old = testBtn.innerHTML;
+    let played = false;
     testBtn.disabled = true;
     testBtn.innerHTML = '<span class="busy-dot"></span> Preparing…';
-    if (testStatus) testStatus.textContent = '';
     const stopProgress = onPiperProgress(p => {
-      if (testStatus && (p.phase === 'downloading' || p.phase === 'preparing')) testStatus.textContent = piperProgressLabel(p);
+      if (p.phase === 'downloading') testBtn.innerHTML = `<span class="busy-dot"></span> Downloading ${p.percent || 0}%…`;
+      else if (p.phase === 'preparing') testBtn.innerHTML = '<span class="busy-dot"></span> Preparing…';
     });
     try {
       await previewSpeech({
@@ -2512,20 +2513,18 @@ function openAudiobookDialog(state) {
         piperVoice: audioVoiceId,
         piperSpeaker: audioSpeaker,
       }, 'This is how your audiobook will sound — warm, clear, and unhurried.');
-      if (testStatus) testStatus.textContent = 'Playing sample…';
-      setTimeout(() => { if (testStatus?.textContent === 'Playing sample…') testStatus.textContent = ''; }, 4000);
+      played = true;
+      testBtn.innerHTML = '<span class="busy-dot"></span> Playing…';
+      setTimeout(() => { if (!testBtn.disabled) testBtn.innerHTML = old; }, 2600);
     } catch (err) {
       toast(err.message || 'Could not play that voice sample.', 'err');
     } finally {
       stopProgress();
       testBtn.disabled = false;
-      testBtn.innerHTML = old;
+      if (!played) testBtn.innerHTML = old;
     }
   });
 
-  const foot = document.createElement('div');
-  foot.innerHTML = '<button class="btn" data-cancel>Cancel</button><button class="btn btn-primary" data-start-audio>Create audiobook</button>';
-  const m = modal({ eyebrow: 'Audiobook', title: 'Make an audiobook', body, foot, wide: true, onClose: () => stopPreview() });
   const scopeSelect = body.querySelector('#audioScope');
   scopeSelect.addEventListener('change', () => {
     body.querySelector('#audioEstimate').textContent = estimate(scopeSelect.value);

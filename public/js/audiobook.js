@@ -1,7 +1,7 @@
 /* Local audiobook export. Renders chapters with the selected Piper voice
    and downloads them as WAV files in a zip with an M3U playlist. */
 
-import { piperGenerate, piperVoiceById, cleanForSpeech } from './tts.js';
+import { piperGenerate, piperVoiceById, piperSpeakerName, cleanForSpeech } from './tts.js';
 import { getPrefs } from './prefs.js';
 import { detectSentenceSegments } from './util.js';
 
@@ -106,10 +106,15 @@ export function audiobookChapters(state, scope = 'book') {
   }));
 }
 
-export async function createAudiobook(state, { scope = 'book', onProgress = () => {}, token = { cancelled: false } } = {}) {
+export async function createAudiobook(state, {
+  scope = 'book', voiceId = null, speaker = null, onProgress = () => {}, token = { cancelled: false },
+} = {}) {
   const tts = getPrefs().tts;
   if (tts.provider !== 'piper') throw new Error('Choose a Piper voice before creating an audiobook.');
-  const voice = piperVoiceById(tts.piperVoice);
+  const voice = piperVoiceById(voiceId || tts.piperVoice);
+  const speakerId = Number.isFinite(Number(speaker))
+    ? Math.max(0, Math.min(Number(speaker), Math.max(0, voice.num_speakers - 1)))
+    : (Number(tts.piperSpeaker) || 0);
   const chapters = audiobookChapters(state, scope);
   if (!chapters.length) throw new Error('This book has no readable chapters.');
 
@@ -128,7 +133,6 @@ export async function createAudiobook(state, { scope = 'book', onProgress = () =
   const zip = new JSZipCtor();
   const entries = [];
   let done = 0;
-  const speaker = Number(tts.piperSpeaker) || 0;
 
   for (let ci = 0; ci < prepared.length; ci++) {
     const chapter = prepared[ci];
@@ -136,7 +140,7 @@ export async function createAudiobook(state, { scope = 'book', onProgress = () =
     let fmt = null;
     for (const sentence of chapter.sentences) {
       if (token.cancelled) throw new Error('Audiobook creation cancelled.');
-      const blob = await piperGenerate(sentence, voice.id, speaker);
+      const blob = await piperGenerate(sentence, voice.id, speakerId);
       const wav = await readWav(blob);
       fmt = fmt || wav.fmt;
       parts.push(wav.data);
@@ -160,7 +164,7 @@ export async function createAudiobook(state, { scope = 'book', onProgress = () =
     app: 'Alya’s Reader',
     title: bookTitle,
     author: state.record?.author || '',
-    voice: `${voice.name}${voice.num_speakers > 1 ? ` · ${speaker}` : ''}`,
+    voice: `${voice.name}${voice.num_speakers > 1 ? ` · ${piperSpeakerName(voice, speakerId)}` : ''}`,
     createdAt: new Date().toISOString(),
     chapters: entries,
   }, null, 2));
@@ -177,5 +181,6 @@ export async function createAudiobook(state, { scope = 'book', onProgress = () =
     filename: `${safeName(bookTitle, 'audiobook')}.zip`,
     chapters: entries.length,
     sentences: totalSentences,
+    voice: `${voice.name}${voice.num_speakers > 1 ? ` · ${piperSpeakerName(voice, speakerId)}` : ''}`,
   };
 }

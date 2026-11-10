@@ -8,7 +8,7 @@ import {
 import { buildReflowable, buildComicBook, isComicFormat } from './renderers.js';
 import { PdfView } from './pdfview.js';
 import { ComicView } from './comicview.js';
-import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName } from './tts.js';
+import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName, getPiperVoices } from './tts.js';
 import {
   toast, modal, confirmDialog, contextMenu, closeAllModals, shortcutsModal,
   formatLabel, isModalOpen,
@@ -2396,11 +2396,13 @@ function openAudiobookDialog(state) {
     return;
   }
   const tts = getPrefs().tts;
-  const voice = piperVoiceById(tts.piperVoice);
-  const speaker = piperSpeakerName(voice, tts.piperSpeaker);
+  const allVoices = getPiperVoices();
   const whole = audiobookChapters(state, 'book');
   const single = audiobookChapters(state, 'chapter');
   if (!whole.length) { toast('No readable text was found for an audiobook.', 'err'); return; }
+  let audioVoiceId = allVoices.some(v => v.id === tts.piperVoice) ? tts.piperVoice : (allVoices[0]?.id || 'en_US-libritts_r-medium');
+  let audioSpeaker = Number(tts.piperSpeaker) || 0;
+
   const body = document.createElement('div');
   const chapterTitle = state.mode === 'pdf' ? `Page ${state.page || 1}` : (single[0]?.title || 'This chapter');
   const estimate = scope => {
@@ -2408,11 +2410,19 @@ function openAudiobookDialog(state) {
       ? (state.mode === 'pdf' ? 250 : (state.chapter?.words || 0))
       : (state.mode === 'pdf' ? (state.numPages || 1) * 250 : (state.book?.words || 0));
     const minutes = Math.max(1, Math.round(words / 160));
-    return `About ${minutes} min of audio · ${scope === 'chapter' ? 1 : whole.length} chapter${(scope === 'chapter' ? 1 : whole.length) === 1 ? '' : 's'} · MP3`;
+    const count = scope === 'chapter' ? 1 : whole.length;
+    return `About ${minutes} min of audio · ${count} chapter${count === 1 ? '' : 's'} · MP3`;
   };
   body.innerHTML = `
     <div class="audiobook-card">
-      <div class="audiobook-voice">${icon('loudhailer')}<span>Default voice: <strong>${esc(voice.name)}${speaker ? ` · ${esc(speaker)}` : ''}</strong></span></div>
+      <div class="field">
+        <label for="audioVoice">Voice</label>
+        <select class="select" id="audioVoice">
+          ${allVoices.map(v => `<option value="${esc(v.id)}"${v.id === audioVoiceId ? ' selected' : ''}>${esc(v.name)} · ${esc(v.language || 'Voice')}${v.country ? ` · ${esc(v.country)}` : ''}</option>`).join('')}
+        </select>
+        <p class="hint" id="audioVoiceNote"></p>
+      </div>
+      <div id="audioSpeakerWrap"></div>
       <div class="field" style="margin-top:12px">
         <label for="audioScope">Export</label>
         <select class="select" id="audioScope">
@@ -2423,6 +2433,63 @@ function openAudiobookDialog(state) {
       <div class="audiobook-estimate" id="audioEstimate">${estimate('book')}</div>
       <p class="hint">Piper runs on your device. A full book can take hours; you can cancel at any time. The download is a zip of MP3 chapters with a playlist.</p>
     </div>`;
+
+  const voiceSelect = body.querySelector('#audioVoice');
+  const speakerWrap = body.querySelector('#audioSpeakerWrap');
+
+  const voiceNote = () => {
+    const v = piperVoiceById(audioVoiceId);
+    const note = body.querySelector('#audioVoiceNote');
+    if (!note) return;
+    note.textContent = v.custom
+      ? `Imported voice · ${v.sizeMB} MB · stored on this device.`
+      : `First use downloads about ${v.sizeMB} MB for ${v.name}; later exports use the browser cache.`;
+  };
+
+  const renderSpeakers = () => {
+    const v = piperVoiceById(audioVoiceId);
+    audioSpeaker = Math.max(0, Math.min(audioSpeaker, Math.max(0, (v.num_speakers || 1) - 1)));
+    if (!v || v.num_speakers <= 1) { speakerWrap.innerHTML = ''; audioSpeaker = 0; return; }
+    const entries = Object.entries(v.speaker_id_map || {}).sort((a, b) => Number(a[1]) - Number(b[1]));
+    const options = entries.length ? entries : Array.from({ length: v.num_speakers }, (_, i) => [`Speaker ${i}`, i]);
+    const many = options.length > 80;
+    speakerWrap.innerHTML = `<div class="field" style="margin-top:12px">
+      <label for="audioSpeaker">Speaker <span class="dim" style="font-weight:400">· ${options.length.toLocaleString()} available</span></label>
+      ${many ? `<input class="input" id="audioSpeakerSearch" placeholder="Search ${options.length.toLocaleString()} speakers" autocomplete="off" spellcheck="false" style="margin-bottom:6px">` : ''}
+      <select class="select" id="audioSpeaker"></select>
+      <div class="hint" id="audioSpeakerCount"></div>
+    </div>`;
+    const select = speakerWrap.querySelector('#audioSpeaker');
+    const search = speakerWrap.querySelector('#audioSpeakerSearch');
+    const count = speakerWrap.querySelector('#audioSpeakerCount');
+    const fill = (query = '') => {
+      const q = query.trim().toLowerCase();
+      const label = name => {
+        const raw = String(name);
+        return /^p?\d+$/i.test(raw) ? `Voice ${raw.replace(/^p/i, '')}` : raw.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      };
+      let matches = q ? options.filter(([name, id]) => `${label(name)} ${id}`.toLowerCase().includes(q)) : options;
+      const current = options.find(([, id]) => Number(id) === audioSpeaker);
+      const limit = q ? 80 : (many ? 80 : options.length);
+      let shown = matches.slice(0, limit);
+      if (current && !shown.some(([, id]) => Number(id) === audioSpeaker)) shown = [current, ...shown];
+      select.innerHTML = shown.map(([name, id]) => `<option value="${Number(id)}"${Number(id) === audioSpeaker ? ' selected' : ''}>${esc(label(name))}</option>`).join('');
+      if (count) count.textContent = q ? `${matches.length} match${matches.length === 1 ? '' : 'es'}` : `Showing ${shown.length} of ${options.length.toLocaleString()} — search to narrow.`;
+    };
+    select.onchange = () => { audioSpeaker = Number(select.value); };
+    search?.addEventListener('input', () => fill(search.value));
+    fill('');
+  };
+
+  voiceSelect.addEventListener('change', () => {
+    audioVoiceId = voiceSelect.value;
+    audioSpeaker = 0;
+    renderSpeakers();
+    voiceNote();
+  });
+  renderSpeakers();
+  voiceNote();
+
   const foot = document.createElement('div');
   foot.innerHTML = '<button class="btn" data-cancel>Cancel</button><button class="btn btn-primary" data-start-audio>Create audiobook</button>';
   const m = modal({ eyebrow: 'Audiobook', title: 'Make an audiobook', body, foot, wide: true });
@@ -2433,6 +2500,8 @@ function openAudiobookDialog(state) {
   foot.querySelector('[data-cancel]').onclick = () => m.close('cancel');
   foot.querySelector('[data-start-audio]').onclick = () => {
     const scope = scopeSelect.value;
+    const voiceId = audioVoiceId;
+    const speaker = audioSpeaker;
     m.close('start');
     window.lumen?.pauseTTS?.();
     const progress = modal({
@@ -2444,13 +2513,19 @@ function openAudiobookDialog(state) {
     const token = { cancelled: false };
     const pct = progress.bodyEl.querySelector('#audioPct');
     const status = progress.bodyEl.querySelector('#audioStatus');
+    const stopVoiceProgress = onPiperProgress(p => {
+      if (status && (p.phase === 'downloading' || p.phase === 'preparing')) status.textContent = piperProgressLabel(p);
+    });
     progress.bodyEl.querySelector('[data-cancel-audio]').onclick = () => {
       token.cancelled = true;
+      stopVoiceProgress();
       progress.close('cancel');
       toast('Audiobook creation cancelled', 'info');
     };
     createAudiobook(state, {
       scope,
+      voiceId,
+      speaker,
       token,
       onProgress: p => {
         if (token.cancelled) return;
@@ -2462,11 +2537,12 @@ function openAudiobookDialog(state) {
         }
       },
     }).then(result => {
+      stopVoiceProgress();
       progress.close('done');
       const done = modal({
         eyebrow: 'Audiobook',
         title: 'Audiobook ready',
-        body: `<p class="hint" style="margin-bottom:12px">${result.chapters} chapter${result.chapters === 1 ? '' : 's'} · ${formatBytes(result.blob.size)} · MP3 + playlist</p>
+        body: `<p class="hint" style="margin-bottom:12px">${result.chapters} chapter${result.chapters === 1 ? '' : 's'} · ${formatBytes(result.blob.size)} · ${esc(result.voice || '')}</p>
           <p class="hint">Save the zip and unzip it into your audiobook player. The playlist keeps chapter order.</p>`,
         foot: `<button class="btn btn-primary" data-download-audiobook>${icon('download')} Download audiobook</button>`,
       });
@@ -2476,6 +2552,7 @@ function openAudiobookDialog(state) {
         toast('Audiobook downloaded', 'ok');
       };
     }).catch(err => {
+      stopVoiceProgress();
       if (!token.cancelled) progress.close('error');
       if (!token.cancelled) toast(err.message || 'Could not create the audiobook.', 'err');
     });

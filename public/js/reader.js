@@ -1578,7 +1578,10 @@ function onTTSEnd(state) {
   state.engine?._requestWakeLock?.();
   if (state.mode === 'pdf') {
     if (state.page < state.numPages) advancePdfTTS(state);
-    else toast('You’ve reached the end of the book.', 'ok');
+    else {
+      state.engine?.stop();
+      toast('You’ve reached the end of the book.', 'ok');
+    }
     return;
   }
   if (state.chapterIndex < state.book.chapters.length - 1) {
@@ -1587,6 +1590,7 @@ function onTTSEnd(state) {
       toast('Narration could not continue to the next chapter.', 'err');
     });
   } else if (state.chapterIndex >= state.book.chapters.length - 1) {
+    state.engine?.stop();
     toast('You’ve reached the end of the book.', 'ok');
   }
 }
@@ -1598,6 +1602,7 @@ async function advanceReflowTTS(state) {
     const started = await startTTS(state, { autoplay: true });
     if (started) return;
   }
+  state.engine?.stop();
   toast('You’ve reached the end of the book.', 'ok');
 }
 
@@ -1613,6 +1618,7 @@ async function advancePdfTTS(state) {
       p++;
     }
     if (!sentences.length) {
+      state.engine?.stop();
       toast('You’ve reached the end of the book.', 'ok');
       return;
     }

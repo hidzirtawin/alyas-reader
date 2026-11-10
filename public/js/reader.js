@@ -2422,11 +2422,11 @@ function openAudiobookDialog(state) {
         </select>
         <p class="hint" id="audioVoiceNote"></p>
       </div>
-      <div id="audioSpeakerWrap"></div>
       <div class="audiobook-test">
         <button class="btn btn-sm" id="audioTestVoice" type="button">${icon('loudhailer')} Test voice</button>
         <span class="hint" id="audioTestStatus"></span>
       </div>
+      <div id="audioSpeakerWrap"></div>
       <div class="field" style="margin-top:12px">
         <label for="audioScope">Export</label>
         <select class="select" id="audioScope">

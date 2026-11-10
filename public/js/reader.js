@@ -1548,13 +1548,16 @@ function scrollRangeIntoView(range) {
 function updateTTSState(state, st) {
   if (!refs) return;
   const btn = refs.ttsDock.querySelector('.tts-play');
-  const playing = st === 'playing' || st === 'loading';
+  const transitioning = st === 'idle' && state.engine?._wantPlaying;
+  const playing = st === 'playing' || st === 'loading' || transitioning;
   if (btn) {
     btn.innerHTML = icon(playing ? 'pause' : 'loudhailer');
     btn.classList.toggle('is-playing', st === 'playing');
     btn.setAttribute('aria-label', playing ? 'Pause narration' : 'Play narration');
   }
-  refs.ttsEq.classList.toggle('is-live', st === 'playing');
+  refs.ttsBtn.classList.toggle('is-live', playing);
+  refs.ttsBtn.querySelector('span').textContent = playing ? 'Listening' : 'Listen';
+  refs.ttsEq.classList.toggle('is-live', st === 'playing' || transitioning);
   if (st === 'playing') refs.ttsEq.classList.add('is-live');
   if (refs.ttsPercent && st !== 'loading') refs.ttsPercent.hidden = true;
   if (st === 'loading') {
@@ -1567,7 +1570,7 @@ function updateTTSState(state, st) {
   }
   if (navigator.mediaSession) {
     try {
-      navigator.mediaSession.playbackState = (st === 'playing' || st === 'loading') ? 'playing' : st === 'paused' ? 'paused' : 'none';
+      navigator.mediaSession.playbackState = playing ? 'playing' : st === 'paused' ? 'paused' : 'none';
     } catch {}
   }
   if (st === 'playing') updateMediaSession(state);
@@ -1575,11 +1578,19 @@ function updateTTSState(state, st) {
 
 function onTTSEnd(state) {
   updateTTSState(state, 'idle');
+  // There is a short asynchronous gap while extracting the next page or
+  // chapter. Keep iOS's media session active throughout that hand-off.
+  if (state.engine?._wantPlaying && 'mediaSession' in navigator) {
+    try { navigator.mediaSession.playbackState = 'playing'; } catch {}
+  }
   state.engine?._requestWakeLock?.();
   if (state.mode === 'pdf') {
     if (state.page < state.numPages) advancePdfTTS(state);
     else {
       state.engine?.stop();
+      if ('mediaSession' in navigator) {
+        try { navigator.mediaSession.playbackState = 'none'; } catch {}
+      }
       toast('You’ve reached the end of the book.', 'ok');
     }
     return;
@@ -1591,6 +1602,9 @@ function onTTSEnd(state) {
     });
   } else if (state.chapterIndex >= state.book.chapters.length - 1) {
     state.engine?.stop();
+    if ('mediaSession' in navigator) {
+      try { navigator.mediaSession.playbackState = 'none'; } catch {}
+    }
     toast('You’ve reached the end of the book.', 'ok');
   }
 }
@@ -1603,6 +1617,9 @@ async function advanceReflowTTS(state) {
     if (started) return;
   }
   state.engine?.stop();
+  if ('mediaSession' in navigator) {
+    try { navigator.mediaSession.playbackState = 'none'; } catch {}
+  }
   toast('You’ve reached the end of the book.', 'ok');
 }
 
@@ -1619,6 +1636,9 @@ async function advancePdfTTS(state) {
     }
     if (!sentences.length) {
       state.engine?.stop();
+      if ('mediaSession' in navigator) {
+        try { navigator.mediaSession.playbackState = 'none'; } catch {}
+      }
       toast('You’ve reached the end of the book.', 'ok');
       return;
     }

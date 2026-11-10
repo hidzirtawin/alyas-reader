@@ -926,6 +926,8 @@ export class SpeechEngine {
     this._token++;
     clearTimeout(this._retryTimer);
     this._retryTimer = null;
+    clearTimeout(this._resumeTimer);
+    this._resumeTimer = null;
     clearTimeout(this._pauseTimer);
     this._pauseTimer = null;
     this._pendingAdvance = null;
@@ -947,6 +949,9 @@ export class SpeechEngine {
     this._invalidate();
     this._stopKeepAlive();
     this._setState('idle');
+    // A stop at the end of a chapter/book can happen while already idle;
+    // notify the UI anyway so it does not keep claiming that it is listening.
+    this.onState('idle');
     if (!keepIndex) this.index = 0;
     this._releaseWakeLock();
   }
@@ -1176,7 +1181,29 @@ export class SpeechEngine {
     src.connect(this._audioGain);
     src.onended = () => {
       if (token !== this._token) return;
+      const elapsed = Math.max(0, (ctx.currentTime - this._audioStartedAt) * this._audioRate);
+      const remaining = buffer.duration - this._audioOffset;
       this._audioSource = null;
+      try { src.disconnect(); } catch {}
+      // iOS may end a Web Audio source when an audio interruption occurs.
+      // Do not interpret an early end as a completed sentence: continue the
+      // same decoded clip from the point where the audio clock stopped.
+      if (elapsed + 0.35 < remaining) {
+        const offset = this._audioOffset + elapsed;
+        this._audioOffset = offset;
+        this._stalledAt = Date.now();
+        const resume = () => {
+          if (token !== this._token || !this._wantPlaying || this.state === 'paused') return;
+          if (sharedAudioCtx?.state !== 'running') {
+            this._resumeTimer = setTimeout(resume, 1200);
+            return;
+          }
+          this._stalledAt = 0;
+          this._playBufferSource(buffer, offset, token);
+        };
+        this._resumeTimer = setTimeout(resume, 250);
+        return;
+      }
       this._audioBuffer = null;
       this._audioOffset = 0;
       this._advanceChunk();
@@ -1327,6 +1354,8 @@ export class SpeechEngine {
     this._pauseTimer = null;
     clearTimeout(this._retryTimer);
     this._retryTimer = null;
+    clearTimeout(this._resumeTimer);
+    this._resumeTimer = null;
     this._pendingAdvance = null;
     this._chunkStartedAt = 0;
     this._stopWebAudio(true);

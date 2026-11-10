@@ -614,6 +614,94 @@ function silentAudioSrc() {
   return silentWavUrl;
 }
 
+/* ── iOS-safe audio ───────────────────────────────────────────────
+   Safari blocks media elements that were not started by a tap, which
+   made narration stop after a refresh, a phone call or a lock screen.
+   Web Audio stays unlocked once it has been resumed inside a gesture,
+   so narration and previews keep playing through async generation. */
+let sharedAudioCtx = null;
+let gestureUnlockBound = false;
+
+function configureAudioSession() {
+  try {
+    // iOS 17+: play as a media app, ignoring the ring/silent switch and
+    // keeping audio alive when the screen locks.
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';
+  } catch {}
+}
+
+try { configureAudioSession(); } catch {}
+
+export function audioContext() {
+  if (sharedAudioCtx) return sharedAudioCtx;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  try { sharedAudioCtx = new Ctx(); } catch { return null; }
+  sharedAudioCtx.addEventListener?.('statechange', () => {
+    if (sharedAudioCtx.state === 'interrupted') {
+      try { sharedAudioCtx.resume(); } catch {}
+    }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && sharedAudioCtx.state !== 'running') {
+      try { sharedAudioCtx.resume(); } catch {}
+    }
+  });
+  return sharedAudioCtx;
+}
+
+/* Call synchronously from a tap/click. It primes Web Audio and installs
+   a page-wide gesture listener, so a suspended session self-heals the
+   next time the user touches the screen. */
+export function unlockAudio() {
+  configureAudioSession();
+  const ctx = audioContext();
+  if (!ctx) return null;
+  const kick = () => {
+    try { ctx.resume(); } catch {}
+    try {
+      const buffer = ctx.createBuffer(1, 1, ctx.sampleRate || 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch {}
+  };
+  kick();
+  if (!gestureUnlockBound) {
+    gestureUnlockBound = true;
+    const resume = () => {
+      configureAudioSession();
+      try { sharedAudioCtx.resume(); } catch {}
+    };
+    document.addEventListener('pointerdown', resume, true);
+    document.addEventListener('touchstart', resume, true);
+    document.addEventListener('keydown', resume, true);
+  }
+  return ctx;
+}
+
+/* Unlock on the very first interaction anywhere in the app, so playback
+   started later (after a fetch or a chapter change) is never blocked. */
+if (typeof document !== 'undefined') {
+  const firstGesture = () => unlockAudio();
+  document.addEventListener('pointerdown', firstGesture, { capture: true, once: true });
+  document.addEventListener('touchstart', firstGesture, { capture: true, once: true });
+  document.addEventListener('keydown', firstGesture, { capture: true, once: true });
+}
+
+function decodeAudioBlob(ctx, blob) {
+  return blob.arrayBuffer().then(bytes => new Promise((resolve, reject) => {
+    let settled = false;
+    const ok = buffer => { if (!settled) { settled = true; resolve(buffer); } };
+    const bad = err => { if (!settled) { settled = true; reject(err); } };
+    try {
+      const maybe = ctx.decodeAudioData(bytes.slice(0), ok, bad);
+      if (maybe?.then) maybe.then(ok, bad);
+    } catch (err) { bad(err); }
+  }));
+}
+
 /* ═══════════════════════════════════════════════════════════════════ */
 
 export class SpeechEngine {
@@ -634,6 +722,12 @@ export class SpeechEngine {
     this._audioEl = null;
     this._keepAlive = null;
     this._primed = false;
+    this._audioSource = null;
+    this._audioBuffer = null;
+    this._audioGain = null;
+    this._audioOffset = 0;
+    this._audioStartedAt = 0;
+    this._audioRate = 1;
     this._audioUrl = null;
     this._cache = new Map();
     this._inFlight = new Map();
@@ -653,7 +747,12 @@ export class SpeechEngine {
     // If the OS or a headset pauses audio without pausing the session,
     // keep narration alive instead of silently stopping.
     this._watchdog = setInterval(() => {
-      if (this.state === 'playing' && this._audio) {
+      if (this.state === 'playing' && this._audioSource) {
+        this._requestWakeLock();
+        if (sharedAudioCtx && sharedAudioCtx.state !== 'running') {
+          try { sharedAudioCtx.resume(); } catch {}
+        }
+      } else if (this.state === 'playing' && this._audio) {
         this._requestWakeLock();
         if (this._audio.ended) {
           this._audio.onended = null;
@@ -688,10 +787,13 @@ export class SpeechEngine {
       return;
     }
     if (!this.sentences.length) return;
+    unlockAudio();
     if (this.state === 'paused') {
       if (this.provider === 'system') {
         this._setPlaying();
         this._speakSystemChunk();
+      } else if (this._resumeWebAudio()) {
+        // resumed from the exact spot inside the generated clip
       } else if (this._audio) {
         this._startKeepAlive();
         this._setPlaying();
@@ -709,6 +811,7 @@ export class SpeechEngine {
   // Called synchronously from a tap so iOS allows the later async playback.
   _primeAudio() {
     if (this.provider !== 'piper') return;
+    unlockAudio();
     this._startKeepAlive();
     if (!this._audioEl) this._audioEl = new Audio();
     if (this._primed) return;
@@ -737,8 +840,11 @@ export class SpeechEngine {
     this._pauseTimer = null;
     if (this.provider === 'system') {
       try { speechSynthesis.cancel(); } catch {}
-    } else if (this._audio) {
-      try { this._audio.pause(); } catch {}
+    } else {
+      this._pauseWebAudio();
+      if (this._audio) {
+        try { this._audio.pause(); } catch {}
+      }
     }
     this._setState('paused');
     this._releaseWakeLock();
@@ -773,8 +879,12 @@ export class SpeechEngine {
 
   setRate(rate) {
     setTtsPrefs({ rate });
+    const r = Math.max(0.5, Math.min(2, Number(rate) || 1));
+    if (this.provider !== 'system' && this._audioSource) {
+      try { this._audioSource.playbackRate.value = r; this._audioRate = r; } catch {}
+    }
     if (this.provider !== 'system' && this._audio) {
-      try { this._audio.playbackRate = Math.max(0.5, Math.min(2, rate)); } catch {}
+      try { this._audio.playbackRate = r; } catch {}
     }
   }
 
@@ -793,6 +903,9 @@ export class SpeechEngine {
 
   destroy() {
     this.stop();
+    this._stopWebAudio(true);
+    try { this._audioGain?.disconnect(); } catch {}
+    this._audioGain = null;
     try { speechSynthesis.removeEventListener?.('voiceschanged', this._onVoices); } catch {}
     document.removeEventListener('visibilitychange', this._onVisibility);
     clearInterval(this._watchdog);
@@ -873,6 +986,9 @@ export class SpeechEngine {
     }
     if (token !== this._token) return;
 
+    if (await this._playAudioBuffer(entry, token)) return;
+    if (token !== this._token) return;
+
     const prefs = getPrefs().tts;
     const audio = this._audioEl || new Audio();
     audio.src = entry.url;
@@ -900,6 +1016,98 @@ export class SpeechEngine {
     } catch {
       if (token !== this._token) return;
       this._fail('Your browser blocked audio playback. Tap play once more.');
+    }
+  }
+
+  /* Web Audio playback. Unlike <audio>, an unlocked AudioContext keeps
+     playing after a long async gap, a phone call or a screen lock. */
+  async _playAudioBuffer(entry, token) {
+    const ctx = audioContext();
+    if (!ctx) return false;
+    let buffer = entry.buffer;
+    if (!buffer) {
+      try {
+        const blob = entry.blob || await (await fetch(entry.url)).blob();
+        buffer = await decodeAudioBlob(ctx, blob);
+        entry.buffer = buffer;
+      } catch {
+        return false;
+      }
+    }
+    if (token !== this._token) return true;
+    if (ctx.state !== 'running') {
+      try { await ctx.resume(); } catch {}
+    }
+    this._audio = null;
+    this._playBufferSource(buffer, 0, token);
+    this._startKeepAlive();
+    this._setState('playing');
+    this._requestWakeLock();
+    return true;
+  }
+
+  _playBufferSource(buffer, offset, token) {
+    const ctx = sharedAudioCtx;
+    if (!ctx) return false;
+    this._stopWebAudio(false);
+    const prefs = getPrefs().tts;
+    if (!this._audioGain) {
+      this._audioGain = ctx.createGain();
+      this._audioGain.connect(ctx.destination);
+    }
+    this._audioGain.gain.value = clampNum(prefs.volume ?? 0.9, 0, 1);
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    this._audioRate = clampNum(prefs.rate, 0.5, 2);
+    src.playbackRate.value = this._audioRate;
+    src.connect(this._audioGain);
+    src.onended = () => {
+      if (token !== this._token) return;
+      this._audioSource = null;
+      this._audioBuffer = null;
+      this._audioOffset = 0;
+      this._advanceChunk();
+    };
+    this._audioSource = src;
+    this._audioBuffer = buffer;
+    this._audioOffset = Math.max(0, Math.min(offset, Math.max(0, buffer.duration - 0.01)));
+    this._audioStartedAt = ctx.currentTime;
+    try { src.start(0, this._audioOffset); } catch { try { src.start(0); } catch {} }
+    return true;
+  }
+
+  _pauseWebAudio() {
+    const src = this._audioSource;
+    if (!src) return;
+    if (sharedAudioCtx) {
+      this._audioOffset += Math.max(0, sharedAudioCtx.currentTime - this._audioStartedAt) * this._audioRate;
+    }
+    this._stopWebAudio(false);
+  }
+
+  _resumeWebAudio() {
+    const buffer = this._audioBuffer;
+    if (!buffer || !sharedAudioCtx) return false;
+    if (this._audioOffset >= buffer.duration - 0.05) return false;
+    const token = ++this._token;
+    this._playBufferSource(buffer, this._audioOffset, token);
+    this._startKeepAlive();
+    this._setState('playing');
+    this._requestWakeLock();
+    return true;
+  }
+
+  _stopWebAudio(clearBuffer = true) {
+    const src = this._audioSource;
+    this._audioSource = null;
+    if (src) {
+      src.onended = null;
+      try { src.stop(); } catch {}
+      try { src.disconnect(); } catch {}
+    }
+    if (clearBuffer) {
+      this._audioBuffer = null;
+      this._audioOffset = 0;
     }
   }
 
@@ -975,6 +1183,7 @@ export class SpeechEngine {
     this._token++;
     clearTimeout(this._pauseTimer);
     this._pauseTimer = null;
+    this._stopWebAudio(true);
     try { speechSynthesis.cancel(); } catch {}
     if (this._audio) {
       try { this._audio.pause(); } catch {}
@@ -1017,7 +1226,7 @@ export class SpeechEngine {
     const promise = piperGenerate(text, voiceId, speaker)
       .then(blob => {
         const url = URL.createObjectURL(blob);
-        const entry = { url, at: Date.now() };
+        const entry = { url, blob, at: Date.now() };
         this._cache.set(key, entry);
         this._trimCache();
         return entry;
@@ -1099,9 +1308,22 @@ function clampNum(n, min, max) {
 /* ── One-off preview used by settings / voice picker ───────────────── */
 let previewAudio = null;
 let previewUrl = null;
+let previewSource = null;
+let previewGain = null;
+let previewToken = 0;
 
 export function stopPreview() {
+  previewToken++;
   try { speechSynthesis.cancel(); } catch {}
+  if (previewSource) {
+    try { previewSource.onended = null; previewSource.stop(); } catch {}
+    try { previewSource.disconnect(); } catch {}
+    previewSource = null;
+  }
+  if (previewGain) {
+    try { previewGain.disconnect(); } catch {}
+    previewGain = null;
+  }
   if (previewAudio) {
     try { previewAudio.pause(); } catch {}
     previewAudio = null;
@@ -1114,8 +1336,12 @@ export function stopPreview() {
 
 export async function previewSpeech(tts, text = 'This is how I’ll read your book — warm, clear, and unhurried.') {
   stopPreview();
+  const token = previewToken;
   if (!tts.enabled) return;
+  configureAudioSession();
+
   if (tts.provider === 'system') {
+    unlockAudio();
     if (!('speechSynthesis' in window)) throw new Error('Speech synthesis is not available in this browser.');
     const utter = new SpeechSynthesisUtterance(text);
     const voice = findVoice(tts.voiceURI) || englishVoices()[0] || null;
@@ -1127,27 +1353,65 @@ export async function previewSpeech(tts, text = 'This is how I’ll read your bo
     return;
   }
 
-  // Unlock this audio element inside the tap, before the long generation.
-  const audio = new Audio(silentAudioSrc());
-  previewAudio = audio;
-  audio.volume = 0.0001;
-  const unlock = audio.play().catch(() => {});
+  // Unlock audio inside the tap, before the long generation. Web Audio
+  // survives the async gap; the media element is only a fallback.
+  const ctx = unlockAudio();
+  let audio = null;
+  if (!ctx) {
+    audio = new Audio(silentAudioSrc());
+    previewAudio = audio;
+    audio.volume = 0.0001;
+    audio.play().catch(() => {});
+  }
 
   const blob = await piperGenerate(text, tts.piperVoice, tts.piperSpeaker);
-  if (previewAudio !== audio) return; // the preview was cancelled meanwhile
-  try { await unlock; } catch {}
-  try { audio.pause(); audio.currentTime = 0; } catch {}
+  if (token !== previewToken) return; // cancelled while generating
 
+  if (ctx) {
+    try {
+      const buffer = await decodeAudioBlob(ctx, blob);
+      if (token !== previewToken) return;
+      if (ctx.state !== 'running') {
+        try { await ctx.resume(); } catch {}
+      }
+      previewGain = ctx.createGain();
+      previewGain.gain.value = clampNum(tts.volume ?? 0.9, 0, 1);
+      previewGain.connect(ctx.destination);
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.playbackRate.value = clampNum(tts.rate, 0.5, 2);
+      src.connect(previewGain);
+      src.onended = () => { clearPreviewAudio(); };
+      previewSource = src;
+      src.start(0);
+      return;
+    } catch {
+      // fall through to the media element path
+    }
+  }
+
+  const fallback = audio || new Audio(silentAudioSrc());
+  previewAudio = fallback;
+  try { fallback.pause(); fallback.currentTime = 0; } catch {}
   previewUrl = URL.createObjectURL(blob);
-  audio.src = previewUrl;
-  audio.volume = clampNum(tts.volume ?? 0.9, 0, 1);
-  audio.playbackRate = clampNum(tts.rate, 0.5, 2);
-  audio.preservesPitch = true;
-  audio.onended = () => { clearPreviewAudio(); };
-  await audio.play();
+  fallback.src = previewUrl;
+  fallback.volume = clampNum(tts.volume ?? 0.9, 0, 1);
+  fallback.playbackRate = clampNum(tts.rate, 0.5, 2);
+  fallback.preservesPitch = true;
+  fallback.onended = () => { clearPreviewAudio(); };
+  await fallback.play();
 }
 
 function clearPreviewAudio() {
+  if (previewSource) {
+    try { previewSource.onended = null; previewSource.stop(); } catch {}
+    try { previewSource.disconnect(); } catch {}
+    previewSource = null;
+  }
+  if (previewGain) {
+    try { previewGain.disconnect(); } catch {}
+    previewGain = null;
+  }
   if (previewAudio) {
     try { previewAudio.pause(); } catch {}
     previewAudio = null;

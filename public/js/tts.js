@@ -728,6 +728,7 @@ export class SpeechEngine {
     this._audioOffset = 0;
     this._audioStartedAt = 0;
     this._audioRate = 1;
+    this._stalledAt = 0;
     this._audioUrl = null;
     this._cache = new Map();
     this._inFlight = new Map();
@@ -751,6 +752,24 @@ export class SpeechEngine {
         this._requestWakeLock();
         if (sharedAudioCtx && sharedAudioCtx.state !== 'running') {
           try { sharedAudioCtx.resume(); } catch {}
+        }
+        // If iOS swallowed the `ended` callback, move on instead of dying.
+        if (sharedAudioCtx && this._audioBuffer) {
+          const elapsed = (sharedAudioCtx.currentTime - this._audioStartedAt) * this._audioRate;
+          if (elapsed > this._audioBuffer.duration - this._audioOffset + 10) {
+            this._audioSource.onended = null;
+            this._stopWebAudio(true);
+            this._advanceChunk();
+          }
+        }
+      } else if (this.state === 'playing' && !this._audio) {
+        // Playback state without a source: audio was interrupted before it
+        // could start. Give it a moment, then restart the current chunk.
+        this._requestWakeLock();
+        if (!this._stalledAt) this._stalledAt = Date.now();
+        else if (Date.now() - this._stalledAt > 9000) {
+          this._stalledAt = 0;
+          if (this.provider === 'piper') this._speakChunk();
         }
       } else if (this.state === 'playing' && this._audio) {
         this._requestWakeLock();
@@ -981,8 +1000,17 @@ export class SpeechEngine {
       entry = await this._getAudio(chunk);
     } catch (err) {
       if (token !== this._token) return;
-      this._skipUnreadable(err);
-      return;
+      // iOS can drop the first wasm generation after an interruption;
+      // retry once before treating the sentence as unreadable.
+      try {
+        await new Promise(r => setTimeout(r, 700));
+        if (token !== this._token) return;
+        entry = await this._getAudio(chunk);
+      } catch (err2) {
+        if (token !== this._token) return;
+        this._skipUnreadable(err2 || err);
+        return;
+      }
     }
     if (token !== this._token) return;
 
@@ -991,6 +1019,7 @@ export class SpeechEngine {
 
     const prefs = getPrefs().tts;
     const audio = this._audioEl || new Audio();
+    try { audio.setAttribute('playsinline', ''); } catch {}
     audio.src = entry.url;
     this._audio = audio;
     this._audioUrl = entry.url;
@@ -1010,6 +1039,7 @@ export class SpeechEngine {
       await audio.play();
       if (token !== this._token) { audio.pause(); return; }
       this._errorStreak = 0;
+      this._stalledAt = 0;
       this._startKeepAlive();
       this._setState('playing');
       this._requestWakeLock();
@@ -1029,7 +1059,9 @@ export class SpeechEngine {
       try {
         const blob = entry.blob || await (await fetch(entry.url)).blob();
         buffer = await decodeAudioBlob(ctx, blob);
-        entry.buffer = buffer;
+        // Keep the decoded PCM only while this clip is playing; holding a
+        // buffer for every cached sentence is too much memory on iOS.
+        entry.buffer = null;
       } catch {
         return false;
       }
@@ -1039,6 +1071,7 @@ export class SpeechEngine {
       try { await ctx.resume(); } catch {}
     }
     this._audio = null;
+    this._stalledAt = 0;
     this._playBufferSource(buffer, 0, token);
     this._startKeepAlive();
     this._setState('playing');
@@ -1090,6 +1123,7 @@ export class SpeechEngine {
     if (!buffer || !sharedAudioCtx) return false;
     if (this._audioOffset >= buffer.duration - 0.05) return false;
     const token = ++this._token;
+    this._stalledAt = 0;
     this._playBufferSource(buffer, this._audioOffset, token);
     this._startKeepAlive();
     this._setState('playing');
@@ -1184,6 +1218,7 @@ export class SpeechEngine {
     clearTimeout(this._pauseTimer);
     this._pauseTimer = null;
     this._stopWebAudio(true);
+    this._stalledAt = 0;
     try { speechSynthesis.cancel(); } catch {}
     if (this._audio) {
       try { this._audio.pause(); } catch {}
@@ -1394,6 +1429,7 @@ export async function previewSpeech(tts, text = 'This is how I’ll read your bo
   previewAudio = fallback;
   try { fallback.pause(); fallback.currentTime = 0; } catch {}
   previewUrl = URL.createObjectURL(blob);
+  try { fallback.setAttribute('playsinline', ''); } catch {}
   fallback.src = previewUrl;
   fallback.volume = clampNum(tts.volume ?? 0.9, 0, 1);
   fallback.playbackRate = clampNum(tts.rate, 0.5, 2);

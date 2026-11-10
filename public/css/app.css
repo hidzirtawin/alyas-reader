@@ -1248,6 +1248,34 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
 .sleep-opt span { font-size: 8.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
 .sleep-active { margin-top: 13px; text-align: center; font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
+/* Collections & backup */
+.collection-bar {
+  display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 14px;
+  scrollbar-width: none;
+}
+.collection-bar::-webkit-scrollbar { display: none; }
+.collection-chip {
+  flex: none; padding: 6px 11px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface);
+  font-size: 11px; color: var(--ink-2); white-space: nowrap;
+}
+.collection-chip span { margin-left: 4px; font-size: 9px; color: var(--ink-3); }
+.collection-chip:hover { border-color: var(--accent); }
+.collection-chip.is-active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.collection-chip.is-active span { color: color-mix(in srgb, var(--accent-ink) 75%, transparent); }
+.collection-picker { display: flex; flex-direction: column; gap: 6px; max-height: 250px; overflow-y: auto; }
+.collection-check {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface);
+  font-size: 12px; cursor: pointer;
+}
+.collection-check:hover { background: var(--surface-2); }
+.collection-check input { accent-color: var(--accent); }
+.backup-status { padding: 22px 4px; text-align: center; }
+.backup-pct { font-size: 32px; font-weight: 600; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+.backup-status p { margin-top: 9px; font-size: 11px; line-height: 1.6; color: var(--ink-3); }
+
 /* Free book sources */
 .sources-intro { margin: 2px 0 18px; font-size: 12.5px; line-height: 1.6; color: var(--ink-2); }
 .source-group + .source-group { margin-top: 22px; }

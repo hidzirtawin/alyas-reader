@@ -33,15 +33,17 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 - **Dictionary** — select a word and tap **Define**, or double-click it. A public-domain Webster’s 1913 dictionary is stored offline; other languages also get a Wiktionary link.
 - **Move around** — previous/next chapter buttons sit in the reader footer, the chapter label opens contents, and a chapter dropdown jumps straight to any section. Press `G` for PDF/comic page jumps or a chapter-and-position jump.
 - **Continuous chapter scroll** — an optional layout in Settings → Reading comfort that flows chapters into one long page, appending the next chapter as you read. Narration crosses the joins without stopping.
-- **Search inside a book** — `⌘F` / `Ctrl+F` or More → Search in book. Results show chapter and context; choosing one jumps there and highlights the match.
+- **Search inside a book** — `⌘F` / `Ctrl+F` or More → Search in book. EPUB/text books search chapters; PDFs search every page's text layer. Results show chapter/page and context; choosing one jumps there and highlights the match.
 - **Offline & installable** — a service worker caches the app shell after the first visit, so the reader opens without a network connection and can be installed to the home screen.
 - **Voice storage manager** — see how much space downloaded voice models use, remove individual voices, or clear them all from Settings → Data.
 - **Make it yours** — 13 typefaces in a dropdown (Literata, Merriweather, Lora, EB Garamond, Libre Baskerville, Source Serif 4, Georgia, Palatino, Atkinson, Lexend, Inter, OpenDyslexic and System), four themes (Paper, Sepia, Night, Black), text size, line height, measure, paragraph and letter/word spacing, justification and hyphenation.
 - **Dyslexia-friendly mode** — one tap sets OpenDyslexic, larger text, roomy lines, wider letter/word spacing and left-aligned text.
 - **Sleep timer** — choose 5 to 90 minutes in Settings or the reader menu; narration stops and the screen dims when it ends.
 - **Marks & notes** — bookmarks and four-colour highlights with notes. Everything is grouped by book and reopens at the exact spot.
-- **Autosave** — position, settings, bookmarks and highlights are saved as you read. Comic progress and bookmarks are page-based. Export a JSON backup of notes and progress at any time.
-- **Interruption recovery** — if the browser reloads or interrupts playback, Alya’s Reader reopens the same book and chapter and offers a Resume button for narration.
+- **Autosave** — position, settings, bookmarks and highlights are saved as you read. Comic progress and bookmarks are page-based.
+- **Library backup** — download one zip containing every book file, cover, reading position, bookmark and note; restore it on this or another device. A lightweight notes-only export is also available.
+- **Collections** — group books from the book menu, then filter the library with collection chips.
+- **Interruption recovery** — if the browser reloads or interrupts playback, Alya’s Reader reopens the same book and chapter and resumes narration automatically where the browser allows it.
 - **Keyboard-first** — see shortcuts below.
 
 ## Narration

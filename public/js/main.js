@@ -22,6 +22,7 @@ const app = {
   counts: { books: 0, bookmarks: 0, highlights: 0 },
   storage: { used: 0, quota: 0 },
   search: '',
+  collectionFilter: '',
   marksTab: 'bookmarks',
   pauseTTS: null,
 

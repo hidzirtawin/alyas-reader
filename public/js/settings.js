@@ -209,7 +209,12 @@ export function renderSettings(app) {
               <button class="btn btn-sm" id="manageVoices">Manage</button>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
-              <button class="btn btn-sm" id="exportData">${icon('download')} Export notes &amp; data</button>
+              <button class="btn btn-sm btn-primary" id="backupLibrary">${icon('download')} Backup library</button>
+              <button class="btn btn-sm" id="restoreLibrary">${icon('upload')} Restore backup</button>
+              <input type="file" id="restoreBackup" accept=".zip,application/zip" hidden>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+              <button class="btn btn-sm" id="exportData">${icon('download')} Export notes only</button>
             </div>
             <div class="divider"></div>
             <button class="btn btn-sm btn-danger" id="clearLibrary">${icon('trash')} Delete all books &amp; marks</button>
@@ -343,6 +348,8 @@ function onSettingsClick(app, e) {
   }
   if (e.target.closest('#showShortcuts')) { app.showShortcuts?.(); return; }
   if (e.target.closest('#manageVoices')) { openVoiceManager(app); return; }
+  if (e.target.closest('#backupLibrary')) { backupLibrary(app); return; }
+  if (e.target.closest('#restoreLibrary')) { $('#restoreBackup')?.click(); return; }
   if (e.target.closest('#exportData')) { exportData(app); return; }
   if (e.target.closest('#clearLibrary')) {
     confirmDialog({
@@ -441,6 +448,12 @@ function onSettingsChange(app, e) {
     return;
   }
   if (id === 'setFont') { setReaderPrefs({ font: e.target.value }); renderSettings(app); return; }
+  if (id === 'restoreBackup') {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) restoreLibrary(app, file);
+    return;
+  }
   if (id === 'setContinuous') { setReaderPrefs({ continuous: e.target.checked }); toast(e.target.checked ? 'Continuous layout on — reopen the book to apply.' : 'Continuous layout off — reopen the book to apply.', 'info'); return; }
   if (id === 'setJustify') { setReaderPrefs({ justify: e.target.checked }); return; }
   if (id === 'setHyphens') { setReaderPrefs({ hyphens: e.target.checked }); return; }
@@ -449,6 +462,106 @@ function onSettingsChange(app, e) {
 }
 
 /* ── Export ───────────────────────────────────────────────────────── */
+async function backupLibrary(app) {
+  if (!window.JSZip) { toast('The backup library did not load. Reload and try again.', 'err'); return; }
+  const m = modal({
+    eyebrow: 'Backup',
+    title: 'Backing up your library',
+    body: '<div class="backup-status"><div class="backup-pct" id="backupPct">0%</div><p>Packing books, covers, positions, bookmarks and notes into one file.</p></div>',
+    dismissible: false,
+  });
+  const pct = m.bodyEl.querySelector('#backupPct');
+  try {
+    const zip = new window.JSZip();
+    const books = app.books.map(b => ({ ...b }));
+    zip.file('manifest.json', JSON.stringify({
+      app: 'Alya’s Reader',
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      books,
+      progress: [...app.progress.values()],
+      bookmarks: app.bookmarks,
+      highlights: app.highlights,
+      settings: { theme: getPrefs().theme, reader: getPrefs().reader },
+    }, null, 2));
+    const folder = zip.folder('files');
+    for (let i = 0; i < books.length; i++) {
+      const blob = await db.getBlob(books[i].id).catch(() => null);
+      if (blob) folder.file(books[i].id, blob);
+      if (pct) pct.textContent = `${Math.round(((i + 1) / Math.max(1, books.length)) * 35)}%`;
+    }
+    const out = await zip.generateAsync({ type: 'blob', compression: 'STORE' }, meta => {
+      if (pct) pct.textContent = `${Math.round(meta.percent)}%`;
+    });
+    m.close();
+    downloadBlob(out, `alyas-reader-backup-${new Date().toISOString().slice(0, 10)}.zip`);
+    toast('Library backup downloaded', 'ok');
+  } catch (err) {
+    m.close();
+    toast(err.message || 'Could not create the backup.', 'err');
+  }
+}
+
+async function restoreLibrary(app, file) {
+  if (!window.JSZip) { toast('The restore library did not load. Reload and try again.', 'err'); return; }
+  let zip;
+  try { zip = await window.JSZip.loadAsync(file); }
+  catch { toast('That file is not a valid backup.', 'err'); return; }
+  const manifestFile = zip.file('manifest.json');
+  if (!manifestFile) { toast('That backup is missing its manifest.', 'err'); return; }
+  let manifest;
+  try { manifest = JSON.parse(await manifestFile.async('string')); }
+  catch { toast('The backup manifest is damaged.', 'err'); return; }
+  if (manifest.app !== 'Alya’s Reader') { toast('That is not an Alya’s Reader backup.', 'err'); return; }
+  const incoming = Array.isArray(manifest.books) ? manifest.books : [];
+  if (!incoming.length) { toast('This backup contains no books.', 'info'); return; }
+  const ok = await confirmDialog({
+    title: 'Restore this backup?',
+    message: `This will add ${incoming.length} book${incoming.length === 1 ? '' : 's'} and their marks. Books already in your library are skipped.`,
+    confirmLabel: 'Restore backup',
+  });
+  if (!ok) return;
+
+  const m = modal({
+    eyebrow: 'Restore',
+    title: 'Restoring your library',
+    body: '<div class="backup-status"><div class="backup-pct" id="restorePct">0%</div><p>Adding books, positions and marks.</p></div>',
+    dismissible: false,
+  });
+  const pct = m.bodyEl.querySelector('#restorePct');
+  const existing = new Set(app.books.map(b => b.id));
+  const available = new Set(existing);
+  let added = 0;
+  let skipped = 0;
+  try {
+    for (let i = 0; i < incoming.length; i++) {
+      const book = incoming[i];
+      if (existing.has(book.id)) { skipped++; available.add(book.id); }
+      else {
+        const entry = zip.file(`files/${book.id}`);
+        if (!entry) { skipped++; continue; }
+        const blob = await entry.async('blob');
+        await db.putBook(book);
+        await db.addFile(book.id, blob, book.fileName || `${book.title}.${book.format}`, blob.type || book.mime || 'application/octet-stream');
+        available.add(book.id);
+        added++;
+      }
+      if (pct) pct.textContent = `${Math.round(((i + 1) / Math.max(1, incoming.length)) * 80)}%`;
+    }
+    for (const rec of manifest.progress || []) if (available.has(rec.bookId)) await db.putProgress(rec);
+    for (const rec of manifest.bookmarks || []) if (available.has(rec.bookId)) await db.putBookmark(rec);
+    for (const rec of manifest.highlights || []) if (available.has(rec.bookId)) await db.putHighlight(rec);
+    if (pct) pct.textContent = '100%';
+    m.close();
+    await app.reload();
+    renderSettings(app);
+    toast(`Restored ${added} book${added === 1 ? '' : 's'}${skipped ? ` · ${skipped} skipped` : ''}`, 'ok');
+  } catch (err) {
+    m.close();
+    toast(err.message || 'The backup could not be restored.', 'err');
+  }
+}
+
 function exportData(app) {
   try {
     const prefs = getPrefs();
@@ -461,6 +574,7 @@ function exportData(app) {
       books: app.books.map(b => ({
         id: b.id, title: b.title, author: b.author, format: b.format,
         fileName: b.fileName, size: b.size, addedAt: b.addedAt, lastOpenedAt: b.lastOpenedAt,
+        collections: b.collections || [],
       })),
       progress: [...app.progress.values()],
       bookmarks: app.bookmarks,

@@ -2271,22 +2271,60 @@ function jumpToSearchHit(state, chapterIndex, query, occurrence) {
   setTimeout(() => scrollToSearchHit(state, query, occurrence), 90);
 }
 
+async function searchPdfBook(state, query, token, meta) {
+  const needle = query.toLowerCase();
+  const results = [];
+  const total = state.numPages || 1;
+  for (let page = 1; page <= total; page++) {
+    if (token.cancelled) return null;
+    let sentences = [];
+    try { sentences = await state.pdfView.getPageSentences(page); } catch {}
+    if (sentences.length) {
+      const text = sentences.map(s => s.text).join(' ');
+      const lower = text.toLowerCase();
+      let from = 0;
+      let occurrence = 0;
+      while (occurrence < 4) {
+        const at = lower.indexOf(needle, from);
+        if (at < 0) break;
+        const sentence = sentences.find(s => s.text.toLowerCase().includes(needle)) || sentences[0];
+        results.push({
+          page,
+          sentence,
+          snippet: snippetHtml(text, at, needle.length),
+        });
+        occurrence++;
+        from = at + needle.length;
+        if (results.length >= 80) break;
+      }
+    }
+    if (meta) meta.textContent = `Searching page ${page} of ${total}…`;
+    if (results.length >= 80) break;
+    if (page % 3 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+  return results;
+}
+
 function openBookSearch(state) {
   const body = document.createElement('div');
   body.innerHTML = `
     <form class="book-search-form" autocomplete="off">
-      <input class="input" id="bookSearchInput" placeholder="Search this book" spellcheck="false" aria-label="Search this book">
+      <input class="input" id="bookSearchInput" placeholder="Search this ${state.mode === 'pdf' ? 'PDF' : 'book'}" spellcheck="false" aria-label="Search in book">
       <button class="btn btn-sm btn-primary" type="submit">Find</button>
     </form>
     <div class="book-search-meta" id="bookSearchMeta">Type at least two letters.</div>
     <div class="book-search-results" id="bookSearchResults"></div>`;
-  const m = modal({ eyebrow: 'Search', title: 'Search in book', body, wide: true });
+  const m = modal({ eyebrow: 'Search', title: 'Search in book', body, wide: true, onClose: () => { token.cancelled = true; } });
   const input = body.querySelector('#bookSearchInput');
   const meta = body.querySelector('#bookSearchMeta');
   const list = body.querySelector('#bookSearchResults');
   let found = [];
+  let token = { cancelled: false };
 
-  const render = () => {
+  const render = async () => {
+    token.cancelled = true;
+    const current = { cancelled: false };
+    token = current;
     const query = input.value.trim();
     if (query.length < 2) {
       found = [];
@@ -2294,6 +2332,25 @@ function openBookSearch(state) {
       list.innerHTML = '';
       return;
     }
+
+    if (state.mode === 'pdf') {
+      found = [];
+      list.innerHTML = '';
+      meta.textContent = `Searching page 1 of ${state.numPages || 1}…`;
+      const results = await searchPdfBook(state, query, current, meta);
+      if (current.cancelled) return;
+      found = results || [];
+      meta.textContent = found.length
+        ? `${found.length}${found.length >= 80 ? '+' : ''} match${found.length === 1 ? '' : 'es'}`
+        : `No matches for “${query}”. This PDF may not contain selectable text.`;
+      list.innerHTML = found.map((r, i) => `
+        <button class="search-result" data-search-result="${i}">
+          <span class="sr-chapter">Page ${r.page}</span>
+          <span class="sr-snippet">${r.snippet}</span>
+        </button>`).join('');
+      return;
+    }
+
     found = searchBookText(state, query);
     meta.textContent = found.length
       ? `${found.length}${found.length >= 80 ? '+' : ''} match${found.length === 1 ? '' : 'es'}`
@@ -2305,13 +2362,23 @@ function openBookSearch(state) {
       </button>`).join('');
   };
 
-  const run = debounce(render, 160);
+  const run = debounce(render, 220);
   input.addEventListener('input', run);
   body.querySelector('.book-search-form').addEventListener('submit', event => {
     event.preventDefault();
     render();
   });
   list.addEventListener('click', event => {
+    const resultBtn = event.target.closest('[data-search-result]');
+    if (resultBtn) {
+      const result = found[Number(resultBtn.dataset.searchResult)];
+      if (!result) return;
+      m.close();
+      state.pdfView?.scrollToPage(result.page, { smooth: true });
+      state.page = result.page;
+      setTimeout(() => state.pdfView?.showHighlight(result.sentence), 500);
+      return;
+    }
     const btn = event.target.closest('[data-search-chapter]');
     if (!btn) return;
     const query = input.value.trim();
@@ -2404,7 +2471,7 @@ function openMoreMenu(state) {
   const rect = refs.moreBtn.getBoundingClientRect();
   contextMenu(rect.right - 8, rect.bottom + 8, [
     { label: 'Go to page…', icon: 'list', onSelect: () => openGoTo(state) },
-    ...(state.mode === 'reflow' ? [{ label: 'Search in book…', icon: 'search', onSelect: () => openBookSearch(state) }] : []),
+    ...(state.mode !== 'comic' ? [{ label: 'Search in book…', icon: 'search', onSelect: () => openBookSearch(state) }] : []),
     {
       label: getSleepTimer() ? `Sleep timer · ${formatSleepRemaining(getSleepTimer().remainingMs)}` : 'Sleep timer…',
       icon: 'moon',
@@ -2484,7 +2551,7 @@ function handleStageClick(state, e) {
 function handleKey(state, e) {
   if (state.destroyed || isModalOpen()) return;
   if (isEditable(e.target)) return;
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && state.mode === 'reflow') {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && state.mode !== 'comic') {
     e.preventDefault();
     openBookSearch(state);
     return;

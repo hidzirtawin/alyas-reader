@@ -5,7 +5,7 @@ import { detectFormat, unsupportedMessage, probeFile } from './renderers.js';
 import { getPrefs, savePrefs } from './prefs.js';
 import { openBookDetails } from './details.js';
 import {
-  toast, contextMenu, confirmDialog, coverBox, coverHTML, formatLabel,
+  toast, modal, contextMenu, confirmDialog, coverBox, coverHTML, formatLabel,
 } from './ui.js';
 import {
   $, esc, uid, icon, formatRelative, downloadBlob, clamp,
@@ -17,9 +17,18 @@ export function renderLibrary(app) {
   const prefs = getPrefs();
   const query = (app.search || '').trim();
   const all = sortBooks(app.books, prefs.librarySort);
-  const filtered = query
-    ? all.filter(b => `${b.title} ${b.author} ${b.fileName}`.toLowerCase().includes(query.toLowerCase()))
+  const collections = [...new Set(all.flatMap(b => b.collections || []))].sort((a, b) => a.localeCompare(b));
+  let activeCollection = app.collectionFilter || '';
+  if (activeCollection && !collections.includes(activeCollection)) {
+    activeCollection = '';
+    app.collectionFilter = '';
+  }
+  const inCollection = activeCollection
+    ? all.filter(b => (b.collections || []).includes(activeCollection))
     : all;
+  const filtered = query
+    ? inCollection.filter(b => `${b.title} ${b.author} ${b.fileName}`.toLowerCase().includes(query.toLowerCase()))
+    : inCollection;
 
   const recent = pickRecent(app);
   const importQueue = importQueueMarkup(app);
@@ -34,14 +43,22 @@ export function renderLibrary(app) {
   const hero = recent ? heroMarkup(app, recent) : '';
   const grid = filtered.length
     ? `<div class="book-grid">${filtered.map((b, i) => cardMarkup(app, b, i)).join('')}${query ? '' : addTileMarkup()}</div>`
-    : `<div class="no-results">${icon('search')}<h3>No books match that search</h3><p>Try a different title, author or file name.</p></div>`;
+    : `<div class="no-results">${icon('search')}<h3>${activeCollection ? 'This collection is empty' : 'No books match that search'}</h3><p>${activeCollection ? 'Add books to it from the book menu.' : 'Try a different title, author or file name.'}</p></div>`;
+  const collectionBar = collections.length ? `<div class="collection-bar">
+    <button class="collection-chip${!activeCollection ? ' is-active' : ''}" data-collection="">All books <span>${all.length}</span></button>
+    ${collections.map(c => {
+      const count = all.filter(b => (b.collections || []).includes(c)).length;
+      return `<button class="collection-chip${activeCollection === c ? ' is-active' : ''}" data-collection="${esc(c)}">${esc(c)} <span>${count}</span></button>`;
+    }).join('')}
+  </div>` : '';
 
   view.innerHTML = `
     ${importQueue}
     ${hero}
+    ${collectionBar}
     <div class="section-head">
-      <h2>${query ? 'Search results' : 'All books'}</h2>
-      <span class="count">${filtered.length}${query ? ` of ${all.length}` : ''}</span>
+      <h2>${query ? 'Search results' : (activeCollection || 'All books')}</h2>
+      <span class="count">${filtered.length}${query ? ` of ${inCollection.length}` : ''}</span>
       <span class="spacer"></span>
       ${query ? '' : `<label class="sort-wrap">
         <select id="librarySort" aria-label="Sort library">
@@ -214,6 +231,12 @@ function onLibraryClick(app, e) {
     app.openBookSources?.();
     return;
   }
+  const collectionChip = e.target.closest('[data-collection]');
+  if (collectionChip) {
+    app.collectionFilter = collectionChip.dataset.collection || '';
+    renderLibrary(app);
+    return;
+  }
   if (e.target.closest('[data-demo-shortcuts]')) {
     app.showShortcuts?.();
     return;
@@ -253,6 +276,7 @@ function openCardMenu(app, book, anchor) {
     ...(narration ? [{ label: 'Listen from here', icon: 'loudhailer', onSelect: () => app.openBook(book.id, targetFromProgress(progress, true)) }] : []),
     { sep: true },
     { label: 'Book details', icon: 'info', onSelect: () => openBookDetails(app, book) },
+    { label: 'Collections…', icon: 'folder', onSelect: () => openCollections(app, book) },
     {
       label: 'Download original', icon: 'download', onSelect: async () => {
         try {
@@ -281,6 +305,38 @@ function openCardMenu(app, book, anchor) {
     },
   ];
   contextMenu(rect.right - 8, rect.bottom + 6, items);
+}
+
+function openCollections(app, book) {
+  const all = [...new Set(app.books.flatMap(b => b.collections || []))].sort((a, b) => a.localeCompare(b));
+  const current = new Set(book.collections || []);
+  const body = document.createElement('div');
+  body.innerHTML = `
+    <p class="hint" style="margin-bottom:10px">Choose collections for “${esc(book.title)}”.</p>
+    ${all.length ? `<div class="collection-picker">${all.map(name => `
+      <label class="collection-check">
+        <input type="checkbox" value="${esc(name)}"${current.has(name) ? ' checked' : ''}>
+        <span>${esc(name)}</span>
+      </label>`).join('')}</div>` : '<div class="voice-none">No collections yet.</div>'}
+    <div class="field" style="margin-top:14px">
+      <label for="newCollection">New collection</label>
+      <input class="input" id="newCollection" placeholder="e.g. Bedtime reading" autocomplete="off">
+    </div>`;
+  const foot = document.createElement('div');
+  foot.innerHTML = '<button class="btn" data-cancel>Cancel</button><button class="btn btn-primary" data-save>Save collections</button>';
+  const m = modal({ eyebrow: 'Library', title: 'Collections', body, foot });
+  foot.querySelector('[data-cancel]').onclick = () => m.close('cancel');
+  foot.querySelector('[data-save]').onclick = async () => {
+    const chosen = new Set([...body.querySelectorAll('input[type="checkbox"]:checked')].map(i => i.value));
+    const fresh = body.querySelector('#newCollection')?.value.trim();
+    if (fresh) chosen.add(fresh);
+    const collections = [...chosen].sort((a, b) => a.localeCompare(b));
+    await db.updateBook(book.id, { collections });
+    book.collections = collections;
+    m.close('save');
+    renderLibrary(app);
+    toast(collections.length ? 'Collections updated' : 'Removed from all collections', 'ok');
+  };
 }
 
 /* ── Import ───────────────────────────────────────────────────────── */

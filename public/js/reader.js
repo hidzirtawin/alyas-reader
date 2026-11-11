@@ -14,6 +14,7 @@ import {
   formatLabel, isModalOpen,
 } from './ui.js';
 import { openBookDetails } from './details.js';
+import { downloadBookAudio } from './audioexport.js';
 import { openVoiceModal } from './settings.js';
 import { openDictionary } from './dictionary.js';
 import { getSleepTimer, startSleepTimer, cancelSleepTimer, formatSleepRemaining } from './sleep.js';
@@ -3010,15 +3011,7 @@ function openMoreMenu(state) {
       onSelect: () => openSleepDialog(state),
     },
     { label: 'Book details', icon: 'info', onSelect: () => openBookDetails(state.app, state.record, { fromReader: true }) },
-    {
-      label: 'Download original', icon: 'download', onSelect: async () => {
-        try {
-          const blob = await db.getBlob(state.bookId);
-          if (!blob) throw new Error('The original file is missing.');
-          downloadBlob(blob, state.record.fileName || `${state.record.title}.${state.record.format}`);
-        } catch (err) { toast(err.message, 'err'); }
-      },
-    },
+    { label: 'Download audio', icon: 'download', onSelect: () => downloadBookAudio(state.record, { state }) },
     { label: 'Keyboard shortcuts', icon: 'keyboard', onSelect: () => shortcutsModal() },
     { sep: true },
     {

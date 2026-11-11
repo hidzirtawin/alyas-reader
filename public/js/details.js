@@ -3,7 +3,8 @@
 import { db } from './db.js';
 import { getPrefs } from './prefs.js';
 import { modal, confirmDialog, toast, coverBox, formatLabel } from './ui.js';
-import { downloadBlob, formatDate, formatRelative } from './util.js';
+import { formatDate, formatRelative } from './util.js';
+import { downloadBookAudio } from './audioexport.js';
 
 export function openBookDetails(app, book, { fromReader = false } = {}) {
   if (!book) return;
@@ -47,7 +48,7 @@ export function openBookDetails(app, book, { fromReader = false } = {}) {
   foot.innerHTML = `
     <button class="btn btn-danger btn-sm" data-remove>Remove</button>
     <span style="flex:1"></span>
-    <button class="btn btn-sm" data-download>${'Download'}</button>
+    <button class="btn btn-sm" data-download>Download audio</button>
     ${narration ? '<button class="btn btn-sm" data-listen>Listen</button>' : ''}
     <button class="btn btn-primary btn-sm" data-read>${percent > 0 ? 'Continue' : 'Read'}</button>`;
 
@@ -66,15 +67,7 @@ export function openBookDetails(app, book, { fromReader = false } = {}) {
 
   foot.querySelector('[data-read]').onclick = () => openBook(false);
   foot.querySelector('[data-listen]')?.addEventListener('click', () => openBook(true));
-  foot.querySelector('[data-download]').onclick = async () => {
-    try {
-      const blob = await db.getBlob(book.id);
-      if (!blob) throw new Error('The original file is missing.');
-      downloadBlob(blob, book.fileName || `${book.title}.${book.format}`);
-    } catch (err) {
-      toast(err.message, 'err');
-    }
-  };
+  foot.querySelector('[data-download]').onclick = () => downloadBookAudio(book);
   foot.querySelector('[data-remove]').onclick = async () => {
     const ok = await confirmDialog({
       title: 'Remove this book?',

@@ -4,11 +4,12 @@ import { db } from './db.js';
 import { detectFormat, unsupportedMessage, probeFile } from './renderers.js';
 import { getPrefs, savePrefs } from './prefs.js';
 import { openBookDetails } from './details.js';
+import { downloadBookAudio } from './audioexport.js';
 import {
   toast, modal, contextMenu, confirmDialog, coverBox, coverHTML, formatLabel,
 } from './ui.js';
 import {
-  $, esc, uid, icon, formatRelative, downloadBlob, clamp,
+  $, esc, uid, icon, formatRelative, clamp,
 } from './util.js';
 
 export function renderLibrary(app) {
@@ -278,15 +279,7 @@ function openCardMenu(app, book, anchor) {
     { label: 'Book details', icon: 'info', onSelect: () => openBookDetails(app, book) },
     { label: 'Collections…', icon: 'folder', onSelect: () => openCollections(app, book) },
     ...(!['cbz', 'cbr'].includes(book.format) ? [{ label: 'Make audiobook…', icon: 'loudhailer', onSelect: () => app.openBook(book.id, { audiobook: true }) }] : []),
-    {
-      label: 'Download original', icon: 'download', onSelect: async () => {
-        try {
-          const blob = await db.getBlob(book.id);
-          if (!blob) throw new Error('The original file is missing.');
-          downloadBlob(blob, book.fileName || `${book.title}.${book.format}`);
-        } catch (err) { toast(err.message, 'err'); }
-      },
-    },
+    { label: 'Download audio', icon: 'download', onSelect: () => downloadBookAudio(book) },
     { sep: true },
     {
       label: 'Remove from library', icon: 'trash', danger: true, onSelect: async () => {

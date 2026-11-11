@@ -9,7 +9,7 @@ import { openReader, closeReader, restoreReadingSession } from './reader.js';
 import { shortcutsModal, toast } from './ui.js';
 import { openBookSources } from './sources.js';
 import { startSleepTimer, cancelSleepTimer, getSleepTimer, formatSleepRemaining } from './sleep.js';
-import { loadPiperCatalog, preloadPiperVoice, onPiperProgress, piperProgressLabel } from './tts.js';
+import { loadPiperCatalog, preloadPiperVoice, warmPiperEngine, onPiperProgress, piperProgressLabel } from './tts.js';
 import { $, $$, clamp, formatBytes, debounce, icon } from './util.js';
 
 const app = {
@@ -284,7 +284,12 @@ function warmDefaultVoice() {
   if (!tts.enabled || tts.provider !== 'piper' || navigator.onLine === false) return;
   onPiperProgress(renderVoicePill);
   setTimeout(() => {
-    preloadPiperVoice(tts.piperVoice).catch(err => {
+    preloadPiperVoice(tts.piperVoice).then(result => {
+      if (result === 'missing') return;
+      voicePill?.remove();
+      voicePill = null;
+      setTimeout(() => { warmPiperEngine(tts.piperVoice).catch(() => {}); }, 1200);
+    }).catch(err => {
       console.warn('Default voice download deferred', err);
       voicePill?.remove();
       voicePill = null;

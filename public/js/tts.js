@@ -225,6 +225,17 @@ let piperActivityAt = Date.now();
 
 function notePiperActivity() { piperActivityAt = Date.now(); }
 
+/* iOS freezes timers while the screen is locked. When the page returns,
+   the elapsed wall-clock time must not be mistaken for a stalled worker,
+   or the engine is restarted and the reader sits in "Preparing voice". */
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    notePiperActivity();
+    window.dispatchEvent(new CustomEvent('lumen:narration-resume'));
+  });
+}
+
 function emitPiperProgress(patch = {}) {
   notePiperActivity();
   piperProgress = { ...piperProgress, ...patch };
@@ -582,23 +593,73 @@ export async function preloadPiperVoice(voiceId) {
   return 'downloaded';
 }
 
-/* Piper should only run one synthesis at a time. Running a prefetch and
-   the audible sentence together can exhaust the WASM heap on iOS. */
-let piperQueue = Promise.resolve();
+/* Piper runs one synthesis at a time, but jobs have priorities. The sentence
+   being spoken jumps ahead of look-ahead work, and stale look-ahead jobs are
+   dropped when the reader seeks. */
+const piperJobs = [];
+let piperRunning = false;
+let piperJobSeq = 0;
 
-function enqueuePiper(task) {
-  const run = piperQueue.then(task, task);
-  piperQueue = run.catch(() => {});
-  return run;
+function sortPiperJobs() {
+  piperJobs.sort((a, b) => a.priority - b.priority || a.seq - b.seq);
 }
 
-/* A stalled worker never rejects on its own, which looked like narration
-   randomly stopping. Reject after 60s without any engine progress. */
-function awaitPiperJob(promise, idleLimitMs = 60000) {
+function enqueuePiper(task, { priority = 1, key = null } = {}) {
+  return new Promise((resolve, reject) => {
+    piperJobs.push({ task, priority, key, seq: ++piperJobSeq, resolve, reject });
+    sortPiperJobs();
+    runPiperJobs();
+  });
+}
+
+async function runPiperJobs() {
+  if (piperRunning) return;
+  piperRunning = true;
+  try {
+    while (piperJobs.length) {
+      sortPiperJobs();
+      const job = piperJobs.shift();
+      try {
+        job.resolve(await job.task());
+      } catch (err) {
+        job.reject(err);
+      }
+    }
+  } finally {
+    piperRunning = false;
+  }
+}
+
+function promotePiperJob(key) {
+  if (!key) return;
+  const job = piperJobs.find(item => item.key === key);
+  if (!job || job.priority === 0) return;
+  job.priority = 0;
+  sortPiperJobs();
+}
+
+/* Drop queued look-ahead work, e.g. after a seek to another chapter. */
+function cancelPiperPrefetch() {
+  const keys = [];
+  for (let i = piperJobs.length - 1; i >= 0; i--) {
+    if (piperJobs[i].priority < 2) continue;
+    const [job] = piperJobs.splice(i, 1);
+    if (job.key) keys.push(job.key);
+    const err = new Error('Look-ahead cancelled.');
+    err.code = 'cancelled';
+    job.reject(err);
+  }
+  return keys;
+}
+
+/* A stalled worker never rejects on its own. Use a generous limit, and
+   ignore time spent suspended in the background on iOS. */
+function awaitPiperJob(promise, idleLimitMs = 180000) {
   return new Promise((resolve, reject) => {
     let settled = false;
     const timer = setInterval(() => {
       if (settled) return;
+      if (document.visibilityState === 'hidden') return;
       if (Date.now() - piperActivityAt > idleLimitMs) {
         settled = true;
         clearInterval(timer);
@@ -614,7 +675,7 @@ function awaitPiperJob(promise, idleLimitMs = 60000) {
   });
 }
 
-export async function piperGenerate(text, voiceId, speaker = null) {
+export async function piperGenerate(text, voiceId, speaker = null, { priority = 1, key = null } = {}) {
   await loadPiperCatalog();
   const voice = piperVoiceById(voiceId);
   piperBusy++;
@@ -626,7 +687,7 @@ export async function piperGenerate(text, voiceId, speaker = null) {
       emitPiperProgress({ phase: 'generating', voiceId: voice.id, voiceName: voice.name, percent: 100 });
       const result = await awaitPiperJob(engine.generate(text, voice.id, Number(sp) || 0));
       return result.file; // WAV Blob
-    });
+    }, { priority, key });
   } catch (err) {
     if (err?.code === 'stalled') {
       console.warn('Piper stopped responding; restarting the engine');
@@ -636,6 +697,31 @@ export async function piperGenerate(text, voiceId, speaker = null) {
   } finally {
     piperBusy = Math.max(0, piperBusy - 1);
     if (!piperBusy) settlePiperProgress();
+  }
+}
+
+/* Initialize the worker, encoder and first ONNX session while the app is
+   idle, so the first real sentence does not wait for a cold engine. */
+const warmState = new Map();
+
+export async function warmPiperEngine(voiceId) {
+  const state = warmState.get(voiceId);
+  if (state === 'ready' || state === 'loading') return state;
+  warmState.set(voiceId, 'loading');
+  try {
+    await loadPiperCatalog();
+    const voice = piperVoiceById(voiceId);
+    if (!voice || voice.custom) {
+      warmState.set(voiceId, 'missing');
+      return 'missing';
+    }
+    await piperGenerate('Ready.', voice.id, getPrefs().tts.piperSpeaker || 0, { priority: 3, key: `warm|${voice.id}` });
+    warmState.set(voiceId, 'ready');
+    return 'ready';
+  } catch (err) {
+    console.warn('Voice warm-up deferred', err);
+    warmState.set(voiceId, 'failed');
+    return 'failed';
   }
 }
 
@@ -786,6 +872,7 @@ export class SpeechEngine {
     this._audioUrl = null;
     this._cache = new Map();
     this._inFlight = new Map();
+    this._decoded = new Map();
     this._pauseTimer = null;
     this._wakeLock = null;
     this._errorStreak = 0;
@@ -796,6 +883,8 @@ export class SpeechEngine {
     try { speechSynthesis.addEventListener?.('voiceschanged', this._onVoices); } catch {}
     this._onVisibility = () => {
       if (document.visibilityState !== 'visible') return;
+      if (this.state === 'loading') this._chunkStartedAt = Date.now();
+      this._stalledAt = 0;
       this._requestWakeLock();
       if (sharedAudioCtx && sharedAudioCtx.state !== 'running') {
         try { sharedAudioCtx.resume(); } catch {}
@@ -805,6 +894,11 @@ export class SpeechEngine {
       if (this._wantPlaying && this.state === 'idle' && this.sentences.length) this.play();
     };
     document.addEventListener('visibilitychange', this._onVisibility);
+    this._onAppResume = () => {
+      if (this.state === 'loading') this._chunkStartedAt = Date.now();
+      this._stalledAt = 0;
+    };
+    window.addEventListener('lumen:narration-resume', this._onAppResume);
 
     // If the OS or a headset pauses audio without pausing the session,
     // keep narration alive instead of silently stopping.
@@ -847,7 +941,8 @@ export class SpeechEngine {
         // A worker that never answers would otherwise sit in "Preparing"
         // forever on a locked phone.
         if (this.provider === 'piper' && this._chunkStartedAt
-          && Date.now() - this._chunkStartedAt > 90000) {
+          && document.visibilityState === 'visible'
+          && Date.now() - this._chunkStartedAt > 180000) {
           this._chunkStartedAt = 0;
           resetPiperEngine();
           this._skipUnreadable(new Error('Voice generation stalled.'));
@@ -1027,6 +1122,7 @@ export class SpeechEngine {
 
   seekToSentence(index, fraction = 0) {
     if (!this.sentences.length) return false;
+    this.cancelPrefetch();
     const target = Math.max(0, Math.min(this.sentences.length - 1, Math.floor(Number(index) || 0)));
     const wasPlaying = this.state === 'playing' || this.state === 'loading';
     const wasPaused = this.state === 'paused';
@@ -1057,6 +1153,7 @@ export class SpeechEngine {
     this._audioGain = null;
     try { speechSynthesis.removeEventListener?.('voiceschanged', this._onVoices); } catch {}
     document.removeEventListener('visibilitychange', this._onVisibility);
+    window.removeEventListener('lumen:narration-resume', this._onAppResume);
     clearInterval(this._watchdog);
     this._clearCache();
     this.sentences = [];
@@ -1225,14 +1322,22 @@ export class SpeechEngine {
   async _playAudioBuffer(entry, token) {
     const ctx = audioContext();
     if (!ctx) return false;
-    let buffer = entry.buffer;
+    let buffer = entry.key ? this._decoded.get(entry.key) : null;
+    if (buffer) {
+      this._decoded.delete(entry.key);
+      this._decoded.set(entry.key, buffer);
+    }
+    if (!buffer && entry.bufferPromise) {
+      try { buffer = await entry.bufferPromise; } catch {}
+    }
     if (!buffer) {
       try {
         const blob = entry.blob || await (await fetch(entry.url)).blob();
         buffer = await decodeAudioBlob(ctx, blob);
-        // Keep the decoded PCM only while this clip is playing; holding a
-        // buffer for every cached sentence is too much memory on iOS.
-        entry.buffer = null;
+        if (entry.key) {
+          this._decoded.set(entry.key, buffer);
+          this._trimDecoded();
+        }
       } catch {
         return false;
       }
@@ -1471,32 +1576,40 @@ export class SpeechEngine {
   /* Generate upcoming text without changing the current sentence. */
   prefetchTexts(texts = []) {
     if (this.provider !== 'piper') return;
-    for (const text of texts.slice(0, 1)) {
+    for (const text of texts.slice(0, 5)) {
       const clean = cleanForSpeech(text);
       if (!clean) continue;
       const chunk = splitLongText(clean, 800)[0];
       const key = this._cacheKey(chunk);
       if (this._cache.has(key) || this._inFlight.has(key)) continue;
-      this._getAudio(chunk).catch(() => {});
+      this._getAudio(chunk, false).catch(() => {});
     }
   }
 
-  async _getAudio(text) {
+  async _getAudio(text, urgent = false) {
     if (this.provider !== 'piper') throw new Error('No neural voice is selected.');
     const key = this._cacheKey(text);
     const hit = this._cache.get(key);
-    if (hit) { hit.at = Date.now(); return hit; }
-    if (this._inFlight.has(key)) return this._inFlight.get(key);
+    if (hit) {
+      hit.at = Date.now();
+      this._prepareDecoded(hit);
+      return hit;
+    }
+    if (this._inFlight.has(key)) {
+      if (urgent) promotePiperJob(key);
+      return this._inFlight.get(key);
+    }
 
     const tts = getPrefs().tts;
     const voiceId = this.voice?.voiceId || tts.piperVoice;
     const speaker = this.voice?.voiceId ? (this.voice.speaker ?? 0) : tts.piperSpeaker;
-    const promise = piperGenerate(text, voiceId, speaker)
+    const promise = piperGenerate(text, voiceId, speaker, { priority: urgent ? 0 : 2, key })
       .then(blob => {
         const url = URL.createObjectURL(blob);
-        const entry = { url, blob, at: Date.now() };
+        const entry = { url, blob, key, at: Date.now() };
         this._cache.set(key, entry);
         this._trimCache();
+        this._prepareDecoded(entry);
         return entry;
       })
       .finally(() => this._inFlight.delete(key));
@@ -1505,26 +1618,62 @@ export class SpeechEngine {
     return promise;
   }
 
+  _prepareDecoded(entry) {
+    if (!entry?.blob || !entry.key) return null;
+    if (this._decoded.has(entry.key)) return null;
+    if (entry.bufferPromise) return entry.bufferPromise;
+    const ctx = audioContext();
+    if (!ctx) return null;
+    entry.bufferPromise = decodeAudioBlob(ctx, entry.blob)
+      .then(buffer => {
+        this._decoded.set(entry.key, buffer);
+        this._trimDecoded();
+        // The decoded map is the cache; do not keep a second buffer alive
+        // through every cached entry.
+        entry.bufferPromise = null;
+        return buffer;
+      })
+      .catch(() => {
+        entry.bufferPromise = null;
+        return null;
+      });
+    return entry.bufferPromise;
+  }
+
+  _trimDecoded() {
+    while (this._decoded.size > 6) {
+      const oldest = this._decoded.keys().next().value;
+      this._decoded.delete(oldest);
+    }
+  }
+
   _prefetch(sentenceIndex) {
     if (this.provider !== 'piper') return;
-    // Queue only the next sentence so a long-book seek is never buried behind prefetch work.
-    for (let d = 1; d <= 1; d++) {
+    // Generate several sentences ahead so playback does not wait between
+    // sentences. These jobs yield to the sentence being spoken.
+    for (let d = 1; d <= 5; d++) {
       const next = this.sentences[sentenceIndex + d];
       if (!next) break;
       const text = cleanForSpeech(next.text);
       if (!text) continue;
-      const key = this._cacheKey(text.slice(0, 800));
+      const chunk = splitLongText(text, 800)[0];
+      const key = this._cacheKey(chunk);
       if (this._cache.has(key) || this._inFlight.has(key)) continue;
-      this._getAudio(splitLongText(text, 800)[0]).catch(() => {});
+      this._getAudio(chunk, false).catch(() => {});
     }
   }
 
+  cancelPrefetch() {
+    for (const key of cancelPiperPrefetch()) this._inFlight.delete(key);
+  }
+
   _trimCache() {
-    if (this._cache.size <= 10) return;
+    if (this._cache.size <= 16) return;
     const entries = [...this._cache.entries()].sort((a, b) => a[1].at - b[1].at);
-    while (this._cache.size > 7 && entries.length) {
+    while (this._cache.size > 12 && entries.length) {
       const [key, entry] = entries.shift();
       this._cache.delete(key);
+      this._decoded.delete(key);
       if (entry.url !== this._audioUrl) URL.revokeObjectURL(entry.url);
     }
   }
@@ -1532,6 +1681,8 @@ export class SpeechEngine {
   _clearCache() {
     for (const entry of this._cache.values()) URL.revokeObjectURL(entry.url);
     this._cache.clear();
+    this._inFlight.clear();
+    this._decoded.clear();
   }
 
   /* ── wake lock ───────────────────────────────────────────────── */
@@ -1636,7 +1787,10 @@ export async function previewSpeech(tts, text = 'This is how I’ll read your bo
     audio.play().catch(() => {});
   }
 
-  const blob = await piperGenerate(text, tts.piperVoice, tts.piperSpeaker);
+  const blob = await piperGenerate(text, tts.piperVoice, tts.piperSpeaker, {
+    priority: 0,
+    key: `preview|${tts.piperVoice}|${tts.piperSpeaker || 0}|${text}`,
+  });
   if (token !== previewToken) return; // cancelled while generating
 
   if (ctx) {

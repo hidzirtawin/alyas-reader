@@ -1,5 +1,5 @@
-/* Local audiobook export. Renders chapters with the selected Piper voice
-   and downloads them as WAV files in a zip with an M3U playlist. */
+/* Local audiobook export. Renders with the selected Piper voice and
+   downloads either one MP3 file or MP3 chapters in a zip with a playlist. */
 
 import { piperGenerate, piperVoiceById, piperSpeakerName, cleanForSpeech } from './tts.js';
 import { getPrefs } from './prefs.js';
@@ -51,25 +51,38 @@ async function readWav(blob) {
   return { fmt, data };
 }
 
-function encodeMp3(parts, fmt) {
-  const lame = window.lamejs;
-  if (!lame?.Mp3Encoder) return null;
-  const channels = Math.max(1, Math.min(2, fmt.channels || 1));
-  const encoder = new lame.Mp3Encoder(channels, fmt.sampleRate, 128);
-  const chunks = [];
-  const block = 1152;
-  for (const part of parts) {
-    const copy = new Uint8Array(part.length);
-    copy.set(part);
+class Mp3StreamEncoder {
+  constructor(fmt) {
+    const lame = window.lamejs;
+    if (!lame?.Mp3Encoder) throw new Error('The MP3 encoder did not load. Reload the page and try again.');
+    this.channels = Math.max(1, Math.min(2, fmt.channels || 1));
+    this.encoder = new lame.Mp3Encoder(this.channels, fmt.sampleRate, 128);
+    this.chunks = [];
+    this.block = 1152;
+  }
+
+  push(bytes) {
+    const copy = new Uint8Array(bytes.length);
+    copy.set(bytes);
     const samples = new Int16Array(copy.buffer, 0, Math.floor(copy.length / 2));
-    for (let i = 0; i < samples.length; i += block) {
-      const encoded = encoder.encodeBuffer(samples.subarray(i, Math.min(i + block, samples.length)));
-      if (encoded.length) chunks.push(new Uint8Array(encoded));
+    for (let i = 0; i < samples.length; i += this.block) {
+      const encoded = this.encoder.encodeBuffer(samples.subarray(i, Math.min(i + this.block, samples.length)));
+      if (encoded.length) this.chunks.push(new Uint8Array(encoded));
     }
   }
-  const end = encoder.flush();
-  if (end.length) chunks.push(new Uint8Array(end));
-  return new Blob(chunks, { type: 'audio/mpeg' });
+
+  finish() {
+    const end = this.encoder.flush();
+    if (end.length) this.chunks.push(new Uint8Array(end));
+    return new Blob(this.chunks, { type: 'audio/mpeg' });
+  }
+}
+
+function encodeMp3(parts, fmt) {
+  if (!window.lamejs?.Mp3Encoder) return null;
+  const encoder = new Mp3StreamEncoder(fmt);
+  for (const part of parts) encoder.push(part);
+  return encoder.finish();
 }
 
 function joinWav(parts, fmt) {
@@ -107,7 +120,7 @@ export function audiobookChapters(state, scope = 'book') {
 }
 
 export async function createAudiobook(state, {
-  scope = 'book', voiceId = null, speaker = null, onProgress = () => {}, token = { cancelled: false },
+  scope = 'book', format = 'mp3', voiceId = null, speaker = null, onProgress = () => {}, token = { cancelled: false },
 } = {}) {
   const tts = getPrefs().tts;
   if (tts.provider !== 'piper') throw new Error('Choose a Piper voice before creating an audiobook.');
@@ -128,43 +141,91 @@ export async function createAudiobook(state, {
   if (!prepared.length) throw new Error('No readable text was found for the audiobook.');
   const totalSentences = prepared.reduce((sum, c) => sum + c.sentences.length, 0);
 
+  const single = format === 'mp3';
+  const mp3Available = Boolean(window.lamejs?.Mp3Encoder);
   const JSZipCtor = window.JSZip;
-  if (!JSZipCtor) throw new Error('The zip library did not load. Reload the page and try again.');
-  const zip = new JSZipCtor();
+  if (!single && !JSZipCtor) throw new Error('The zip library did not load. Reload the page and try again.');
+  const zip = single ? null : new JSZipCtor();
   const entries = [];
+  const singleParts = [];
+  let singleEncoder = null;
+  let singlePcmBytes = 0;
+  let singleFmt = null;
   let done = 0;
 
   for (let ci = 0; ci < prepared.length; ci++) {
     const chapter = prepared[ci];
-    const parts = [];
+    const parts = single ? null : [];
     let fmt = null;
     for (const sentence of chapter.sentences) {
       if (token.cancelled) throw new Error('Audiobook creation cancelled.');
       const blob = await piperGenerate(sentence, voice.id, speakerId);
       const wav = await readWav(blob);
       fmt = fmt || wav.fmt;
-      parts.push(wav.data);
+      if (single) {
+        singleFmt ||= wav.fmt;
+        singlePcmBytes += wav.data.length;
+      }
+      if (single && mp3Available) {
+        singleEncoder ||= new Mp3StreamEncoder(fmt);
+        singleEncoder.push(wav.data);
+      } else if (single) {
+        singleParts.push(wav.data);
+      } else {
+        parts.push(wav.data);
+      }
       done++;
       onProgress({ phase: 'generating', percent: Math.round((done / totalSentences) * 90), chapter: ci + 1, chapters: prepared.length, sentence: done, sentences: totalSentences });
     }
     const blockAlign = Math.max(1, Math.round(fmt.channels * fmt.bits / 8));
-    const totalBytes = parts.reduce((sum, part) => sum + part.length, 0);
-    const duration = totalBytes / Math.max(1, fmt.sampleRate * blockAlign);
-    const mp3 = encodeMp3(parts, fmt);
-    const number = String(ci + 1).padStart(2, '0');
-    const ext = mp3 ? 'mp3' : 'wav';
-    const file = `${number} - ${safeName(chapter.title)}.${ext}`;
-    zip.file(file, mp3 || joinWav(parts, fmt).blob);
-    entries.push({ title: chapter.title, file, seconds: Math.round(duration) });
+    if (!single) {
+      const totalBytes = parts.reduce((sum, part) => sum + part.length, 0);
+      const duration = totalBytes / Math.max(1, fmt.sampleRate * blockAlign);
+      const mp3 = encodeMp3(parts, fmt);
+      const number = String(ci + 1).padStart(2, '0');
+      const ext = mp3 ? 'mp3' : 'wav';
+      const file = `${number} - ${safeName(chapter.title)}.${ext}`;
+      zip.file(file, mp3 || joinWav(parts, fmt).blob);
+      entries.push({ title: chapter.title, file, seconds: Math.round(duration) });
+    }
     onProgress({ phase: 'chapter', percent: Math.round(((ci + 1) / prepared.length) * 92), chapter: ci + 1, chapters: prepared.length });
   }
 
   const bookTitle = state.record?.title || state.book?.title || 'Audiobook';
+  const voiceLabel = `${voice.name}${voice.num_speakers > 1 ? ` · ${piperSpeakerName(voice, speakerId)}` : ''}`;
+  const chapterSuffix = scope === 'chapter' && prepared[0]?.title ? ` - ${safeName(prepared[0].title)}` : '';
+
+  if (single) {
+    onProgress({ phase: 'encoding', percent: 94 });
+    let blob;
+    let ext;
+    const outFmt = singleFmt || fmt;
+    const outBlock = Math.max(1, Math.round(outFmt.channels * outFmt.bits / 8));
+    const seconds = singlePcmBytes / Math.max(1, outFmt.sampleRate * outBlock);
+    if (mp3Available) {
+      blob = singleEncoder.finish();
+      ext = 'mp3';
+    } else {
+      blob = joinWav(singleParts, outFmt).blob;
+      ext = 'wav';
+    }
+    onProgress({ phase: 'done', percent: 100 });
+    return {
+      blob,
+      filename: `${safeName(bookTitle, 'audiobook')}${chapterSuffix}.${ext}`,
+      chapters: prepared.length,
+      sentences: totalSentences,
+      voice: voiceLabel,
+      format: ext,
+      duration: seconds,
+    };
+  }
+
   zip.file('chapters.json', JSON.stringify({
     app: 'Alya’s Reader',
     title: bookTitle,
     author: state.record?.author || '',
-    voice: `${voice.name}${voice.num_speakers > 1 ? ` · ${piperSpeakerName(voice, speakerId)}` : ''}`,
+    voice: voiceLabel,
     createdAt: new Date().toISOString(),
     chapters: entries,
   }, null, 2));
@@ -181,6 +242,7 @@ export async function createAudiobook(state, {
     filename: `${safeName(bookTitle, 'audiobook')}.zip`,
     chapters: entries.length,
     sentences: totalSentences,
-    voice: `${voice.name}${voice.num_speakers > 1 ? ` · ${piperSpeakerName(voice, speakerId)}` : ''}`,
+    voice: voiceLabel,
+    format: 'zip',
   };
 }

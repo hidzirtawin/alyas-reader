@@ -8,7 +8,7 @@ import {
 import { buildReflowable, buildComicBook, isComicFormat } from './renderers.js';
 import { PdfView } from './pdfview.js';
 import { ComicView } from './comicview.js';
-import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName, getPiperVoices, previewSpeech, stopPreview } from './tts.js';
+import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName, getPiperVoices, previewSpeech, stopPreview, warmPiperEngine } from './tts.js';
 import {
   toast, modal, confirmDialog, contextMenu, closeAllModals, shortcutsModal,
   formatLabel, isModalOpen,
@@ -61,20 +61,20 @@ export function restoreReadingSession(app) {
   };
   setTimeout(() => { app.openBook(saved.bookId, target); }, 250);
   if (saved.playing) {
+    // A reload has no user gesture, and iOS will not unlock audio. Prepare
+    // the saved sentence paused so the first tap starts narration immediately
+    // instead of silently loading the voice for minutes.
     setTimeout(() => {
       if (!window.lumen?.reader) return;
-      try { window.lumen.resumeTTS?.(); } catch {}
+      try { window.lumen.prepareTTS?.(); } catch {}
     }, 1600);
     setTimeout(() => {
-      const eng = window.lumen?.reader?.engine;
-      if (eng && eng.state !== 'playing' && eng.state !== 'loading') {
-        toast('Narration was interrupted. Tap Resume to continue where you left off.', 'info', {
-          actionLabel: 'Resume',
-          duration: 20000,
-          onAction: () => window.lumen?.resumeTTS?.(),
-        });
-      }
-    }, 5200);
+      toast('Narration is ready at your saved place. Tap Play to continue.', 'info', {
+        actionLabel: 'Play',
+        duration: 20000,
+        onAction: () => window.lumen?.resumeTTS?.(),
+      });
+    }, 2400);
   }
   return true;
 }
@@ -153,6 +153,13 @@ export async function openReader(app, bookId, target = {}) {
   refs.ttsBtn.hidden = !getPrefs().tts.enabled || state.mode === 'comic';
   refs.stage.innerHTML = loadingMarkup(record.title);
 
+  if (state.mode !== 'comic' && getPrefs().tts.enabled && getPrefs().tts.provider === 'piper') {
+    const voiceId = getPrefs().tts.piperVoice;
+    setTimeout(() => {
+      if (!state.destroyed) warmPiperEngine(voiceId).catch(() => {});
+    }, 1200);
+  }
+
   state.bookmarks = (app.bookmarks || []).filter(b => b.bookId === bookId);
   state.highlights = (app.highlights || []).filter(h => h.bookId === bookId);
   state.progressRec = await db.getProgress(bookId);
@@ -177,6 +184,7 @@ export async function openReader(app, bookId, target = {}) {
   updateReaderVoiceChip(state);
   app.pauseTTS = () => state.engine?.pause();
   app.resumeTTS = () => startTTS(state, { autoplay: true });
+  app.prepareTTS = () => startTTS(state, { autoplay: false, paused: true });
   app.stopTTS = () => { state.engine?.stop(); closeTTS(state); };
 
   try {
@@ -245,7 +253,7 @@ export async function closeReader({ skipReload = false, skipSave = false } = {})
   document.body.classList.remove('reader-open');
   const shell = document.querySelector('.shell');
   if (shell) shell.inert = false;
-  if (state.app) { state.app.pauseTTS = null; state.app.resumeTTS = null; state.app.stopTTS = null; }
+  if (state.app) { state.app.pauseTTS = null; state.app.resumeTTS = null; state.app.prepareTTS = null; state.app.stopTTS = null; }
   clearReadingSession();
   if (!skipReload) await state.app.reload();
 }
@@ -1457,8 +1465,7 @@ function openDock(state) {
   // (it can be paused in background windows).
   void refs.ttsDock.offsetWidth;
   refs.ttsDock.classList.add('is-open');
-  refs.ttsBtn.classList.add('is-live');
-  refs.ttsBtn.querySelector('span').textContent = 'Listening';
+  updateTTSState(state, state.engine?.state || 'idle');
   if (!state.ttsUiTimer) state.ttsUiTimer = setInterval(() => updateTTSTimeline(state), 200);
   updateTTSTimeline(state);
   updateVoiceLabel(state);
@@ -1938,6 +1945,7 @@ function readerTimelineProgress(state) {
 }
 
 async function seekReaderTimeline(state, seconds) {
+  state.engine?.cancelPrefetch?.();
   let timeline = state.mode === 'pdf' ? state.pdfTimeline : state.bookTimeline;
   if (!timeline && state.mode === 'pdf') timeline = await ensurePdfTimeline(state);
   if (!timeline?.entries?.length || !timeline.totalWeight) return false;
@@ -2728,8 +2736,15 @@ function openAudiobookDialog(state) {
           <option value="chapter">${state.mode === 'pdf' ? 'This page' : 'This chapter'} · ${esc(chapterTitle)}</option>
         </select>
       </div>
+      <div class="field" style="margin-top:12px">
+        <label for="audioFile">File</label>
+        <select class="select" id="audioFile">
+          <option value="mp3">Single MP3 file</option>
+          <option value="zip">MP3 chapters · zip with playlist</option>
+        </select>
+      </div>
       <div class="audiobook-estimate" id="audioEstimate">${estimate('book')}</div>
-      <p class="hint">Piper runs on your device. A full book can take hours; you can cancel at any time. The download is a zip of MP3 chapters with a playlist.</p>
+      <p class="hint">Piper runs on your device. A full book can take hours; you can cancel at any time. Choose one MP3 for the whole export, or a zip of MP3 chapters with a playlist.</p>
     </div>`;
 
   const voiceSelect = body.querySelector('#audioVoice');
@@ -2824,12 +2839,14 @@ function openAudiobookDialog(state) {
   });
 
   const scopeSelect = body.querySelector('#audioScope');
+  const fileSelect = body.querySelector('#audioFile');
   scopeSelect.addEventListener('change', () => {
     body.querySelector('#audioEstimate').textContent = estimate(scopeSelect.value);
   });
   foot.querySelector('[data-cancel]').onclick = () => m.close('cancel');
   foot.querySelector('[data-start-audio]').onclick = () => {
     const scope = scopeSelect.value;
+    const format = fileSelect.value;
     const voiceId = audioVoiceId;
     const speaker = audioSpeaker;
     m.close('start');
@@ -2843,8 +2860,11 @@ function openAudiobookDialog(state) {
     const token = { cancelled: false };
     const pct = progress.bodyEl.querySelector('#audioPct');
     const status = progress.bodyEl.querySelector('#audioStatus');
+    let generationStarted = false;
     const stopVoiceProgress = onPiperProgress(p => {
-      if (status && (p.phase === 'downloading' || p.phase === 'preparing')) status.textContent = piperProgressLabel(p);
+      if (!generationStarted && status && (p.phase === 'downloading' || p.phase === 'preparing')) {
+        status.textContent = piperProgressLabel(p);
+      }
     });
     progress.bodyEl.querySelector('[data-cancel-audio]').onclick = () => {
       token.cancelled = true;
@@ -2854,32 +2874,42 @@ function openAudiobookDialog(state) {
     };
     createAudiobook(state, {
       scope,
+      format,
       voiceId,
       speaker,
       token,
       onProgress: p => {
         if (token.cancelled) return;
+        if (p.phase === 'generating' || p.phase === 'chapter' || p.phase === 'encoding' || p.phase === 'packing') generationStarted = true;
         if (pct) pct.textContent = `${p.percent || 0}%`;
         if (status) {
-          status.textContent = p.phase === 'packing'
-            ? 'Packing MP3 chapters into a zip…'
-            : `Chapter ${p.chapter || 1} of ${p.chapters || 1}${p.sentences ? ` · sentence ${p.sentence} of ${p.sentences}` : ''}`;
+          status.textContent = p.phase === 'encoding'
+            ? (format === 'mp3' ? 'Finishing the MP3 file…' : 'Finishing the audio file…')
+            : p.phase === 'packing'
+              ? 'Packing MP3 chapters into a zip…'
+              : `Chapter ${p.chapter || 1} of ${p.chapters || 1}${p.sentences ? ` · sentence ${p.sentence} of ${p.sentences}` : ''}`;
         }
       },
     }).then(result => {
       stopVoiceProgress();
       progress.close('done');
+      const isSingle = result.format !== 'zip';
+      const kind = result.format === 'mp3' ? 'MP3' : result.format === 'wav' ? 'WAV' : 'Audiobook';
+      const length = isSingle && result.duration ? ` · ${formatAudioTime(result.duration)}` : '';
       const done = modal({
         eyebrow: 'Audiobook',
-        title: 'Audiobook ready',
-        body: `<p class="hint" style="margin-bottom:12px">${result.chapters} chapter${result.chapters === 1 ? '' : 's'} · ${formatBytes(result.blob.size)} · ${esc(result.voice || '')}</p>
-          <p class="hint">Save the zip and unzip it into your audiobook player. The playlist keeps chapter order.</p>`,
-        foot: `<button class="btn btn-primary" data-download-audiobook>${icon('download')} Download audiobook</button>`,
+        title: isSingle ? `${kind} audio ready` : 'Audiobook ready',
+        body: isSingle
+          ? `<p class="hint" style="margin-bottom:12px">${kind} file${length} · ${formatBytes(result.blob.size)} · ${esc(result.voice || '')}</p>
+            <p class="hint">Save the file and open it in any audio or audiobook player.</p>`
+          : `<p class="hint" style="margin-bottom:12px">${result.chapters} chapter${result.chapters === 1 ? '' : 's'} · ${formatBytes(result.blob.size)} · ${esc(result.voice || '')}</p>
+            <p class="hint">Save the zip and unzip it into your audiobook player. The playlist keeps chapter order.</p>`,
+        foot: `<button class="btn btn-primary" data-download-audiobook>${icon('download')} Download ${isSingle ? kind : 'audiobook'}</button>`,
       });
       done.footEl.querySelector('[data-download-audiobook]').onclick = () => {
         downloadBlob(result.blob, result.filename);
         done.close('download');
-        toast('Audiobook downloaded', 'ok');
+        toast(`${isSingle ? kind : 'Audiobook'} downloaded`, 'ok');
       };
     }).catch(err => {
       stopVoiceProgress();

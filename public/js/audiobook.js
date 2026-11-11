@@ -20,7 +20,7 @@ function sentenceList(text) {
     .filter(line => !/^\s*(?:\d+(?:\.\d+)*|[ivxlcdm]+)[.)]?\s*$/i.test(line));
 }
 
-function safeName(name, fallback = 'chapter') {
+export function safeName(name, fallback = 'chapter') {
   return (name || fallback).replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 70) || fallback;
 }
 
@@ -52,11 +52,11 @@ async function readWav(blob) {
 }
 
 class Mp3StreamEncoder {
-  constructor(fmt) {
+  constructor(fmt, bitrate = 128) {
     const lame = window.lamejs;
     if (!lame?.Mp3Encoder) throw new Error('The MP3 encoder did not load. Reload the page and try again.');
     this.channels = Math.max(1, Math.min(2, fmt.channels || 1));
-    this.encoder = new lame.Mp3Encoder(this.channels, fmt.sampleRate, 128);
+    this.encoder = new lame.Mp3Encoder(this.channels, fmt.sampleRate, bitrate);
     this.chunks = [];
     this.block = 1152;
   }
@@ -78,9 +78,9 @@ class Mp3StreamEncoder {
   }
 }
 
-function encodeMp3(parts, fmt) {
+function encodeMp3(parts, fmt, bitrate = 128) {
   if (!window.lamejs?.Mp3Encoder) return null;
-  const encoder = new Mp3StreamEncoder(fmt);
+  const encoder = new Mp3StreamEncoder(fmt, bitrate);
   for (const part of parts) encoder.push(part);
   return encoder.finish();
 }
@@ -119,6 +119,40 @@ export function audiobookChapters(state, scope = 'book') {
   }));
 }
 
+export async function prepareAudiobook(state, scope = 'book') {
+  const chapters = audiobookChapters(state, scope);
+  if (!chapters.length) throw new Error('This book has no readable chapters.');
+  if (state.mode === 'pdf') {
+    for (const chapter of chapters) {
+      const sentences = await state.pdfView.getPageSentences(chapter.pdfPage);
+      chapter.text = sentences.map(s => s.text).join(' ');
+    }
+  }
+  const prepared = chapters
+    .map(chapter => ({ ...chapter, sentences: sentenceList(chapter.text) }))
+    .filter(chapter => chapter.sentences.length);
+  if (!prepared.length) throw new Error('No readable text was found for the audiobook.');
+  return prepared;
+}
+
+/* Encode one generated WAV sentence as an independent MP3 stream. Keeping
+   each sentence separate lets a long export resume without holding the whole
+   book in memory. */
+export async function sentenceMp3(wavBlob, bitrate = 128) {
+  const wav = await readWav(wavBlob);
+  const blockAlign = Math.max(1, Math.round(wav.fmt.channels * wav.fmt.bits / 8));
+  const seconds = wav.data.length / Math.max(1, wav.fmt.sampleRate * blockAlign);
+  if (!window.lamejs?.Mp3Encoder) throw new Error('The MP3 encoder did not load. Reload the page and try again.');
+  const encoder = new Mp3StreamEncoder(wav.fmt, bitrate);
+  encoder.push(wav.data);
+  return { blob: encoder.finish(), seconds };
+}
+
+export async function renderSentenceMp3(text, voiceId, speaker, bitrate = 128) {
+  const wav = await piperGenerate(text, voiceId, speaker);
+  return sentenceMp3(wav, bitrate);
+}
+
 export async function createAudiobook(state, {
   scope = 'book', format = 'mp3', voiceId = null, speaker = null, onProgress = () => {}, token = { cancelled: false },
 } = {}) {
@@ -128,17 +162,7 @@ export async function createAudiobook(state, {
   const speakerId = Number.isFinite(Number(speaker))
     ? Math.max(0, Math.min(Number(speaker), Math.max(0, voice.num_speakers - 1)))
     : (Number(tts.piperSpeaker) || 0);
-  const chapters = audiobookChapters(state, scope);
-  if (!chapters.length) throw new Error('This book has no readable chapters.');
-
-  if (state.mode === 'pdf') {
-    for (const chapter of chapters) {
-      const sentences = await state.pdfView.getPageSentences(chapter.pdfPage);
-      chapter.text = sentences.map(s => s.text).join(' ');
-    }
-  }
-  const prepared = chapters.map(chapter => ({ ...chapter, sentences: sentenceList(chapter.text) })).filter(c => c.sentences.length);
-  if (!prepared.length) throw new Error('No readable text was found for the audiobook.');
+  const prepared = await prepareAudiobook(state, scope);
   const totalSentences = prepared.reduce((sum, c) => sum + c.sentences.length, 0);
 
   const single = format === 'mp3';

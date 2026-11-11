@@ -3011,7 +3011,7 @@ function openMoreMenu(state) {
       onSelect: () => openSleepDialog(state),
     },
     { label: 'Book details', icon: 'info', onSelect: () => openBookDetails(state.app, state.record, { fromReader: true }) },
-    { label: 'Download audio', icon: 'download', onSelect: () => downloadBookAudio(state.record, { state }) },
+    { label: 'Download audio', icon: 'download', onSelect: () => downloadBookAudio(state.record) },
     { label: 'Keyboard shortcuts', icon: 'keyboard', onSelect: () => shortcutsModal() },
     { sep: true },
     {

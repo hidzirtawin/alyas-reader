@@ -1,7 +1,7 @@
 /* IndexedDB persistence: library metadata, original files, progress, marks. */
 
 const DB_NAME = 'lumen-reader';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 let dbPromise = null;
 
 function openDB() {
@@ -27,6 +27,10 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains('imports')) {
         db.createObjectStore('imports', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('audioExports')) {
+        const s = db.createObjectStore('audioExports', { keyPath: 'id' });
+        s.createIndex('bookId', 'bookId', { unique: false });
       }
     };
     req.onsuccess = () => {
@@ -111,6 +115,13 @@ export const db = {
     return del('imports', id);
   },
 
+  putAudioExport(job) { return put('audioExports', job); },
+  getAudioExport(id) { return get('audioExports', id); },
+  deleteAudioExport(id) { return del('audioExports', id); },
+  listAudioExports() {
+    return getAll('audioExports').then(list => list.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)));
+  },
+
   async listBooks() {
     const books = await getAll('books');
     return books.sort((a, b) => (b.lastOpenedAt || b.addedAt || 0) - (a.lastOpenedAt || a.addedAt || 0));
@@ -171,7 +182,7 @@ export const db = {
 
   async clearAll() {
     const dbi = await openDB();
-    const names = ['books', 'files', 'progress', 'bookmarks', 'highlights', 'imports'];
+    const names = ['books', 'files', 'progress', 'bookmarks', 'highlights', 'imports', 'audioExports'];
     const tx = dbi.transaction(names, 'readwrite');
     names.forEach(n => tx.objectStore(n).clear());
     await done(tx);

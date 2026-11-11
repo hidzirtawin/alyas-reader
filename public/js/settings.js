@@ -3,6 +3,7 @@
 const BUILD = document.querySelector('meta[name="app-build"]')?.content || '1.0';
 
 import { db } from './db.js';
+import { clearAudioExports } from './audioexport.js';
 import {
   getPrefs, savePrefs, setReaderPrefs, FONTS, THEMES, DEFAULT_READER, DYSLEXIA_READER,
 } from './prefs.js';
@@ -358,6 +359,7 @@ function onSettingsClick(app, e) {
       confirmLabel: 'Delete everything',
     }).then(async ok => {
       if (!ok) return;
+      await clearAudioExports();
       await db.clearAll();
       app.bookmarks = [];
       app.highlights = [];

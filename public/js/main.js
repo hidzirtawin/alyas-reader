@@ -10,6 +10,7 @@ import { shortcutsModal, toast } from './ui.js';
 import { openBookSources } from './sources.js';
 import { startSleepTimer, cancelSleepTimer, getSleepTimer, formatSleepRemaining } from './sleep.js';
 import { loadPiperCatalog, preloadPiperVoice, warmPiperEngine, onPiperProgress, piperProgressLabel } from './tts.js';
+import { resumeAudioExports } from './audioexport.js';
 import { $, $$, clamp, formatBytes, debounce, icon } from './util.js';
 
 const app = {
@@ -371,6 +372,7 @@ async function boot() {
     resumePendingImports(app);
     restoreReadingSession(app);
     warmDefaultVoice();
+    setTimeout(() => { resumeAudioExports().catch(() => {}); }, 2500);
   } catch (err) {
     console.error(err);
     $('#view').innerHTML = `<div class="empty-list" style="margin-top:40px">

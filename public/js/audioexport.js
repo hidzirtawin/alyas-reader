@@ -297,29 +297,19 @@ async function runJob(job, chapters, { onProgress = () => {}, token = { cancelle
   }
 }
 
-function saveFile(file, filename) {
-  const url = URL.createObjectURL(file);
+function triggerFileDownload(url, filename) {
+  // Call synchronously from the user's tap: iOS may reject a delayed anchor
+  // click after an awaited OPFS read.
   const a = document.createElement('a');
   a.href = url;
   a.download = filename || 'audiobook.mp3';
   document.body.appendChild(a);
   a.click();
   a.remove();
-  // Large files need time to be read from disk; keep the URL alive.
   setTimeout(() => URL.revokeObjectURL(url), 60 * 60 * 1000);
 }
 
-async function downloadJob(job) {
-  const dir = await jobsDir(false);
-  const handle = await dir.getFileHandle(`${job.id}.mp3`, { create: false });
-  const file = await handle.getFile();
-  saveFile(file, job.filename);
-  job.downloadedAt = Date.now();
-  await db.putAudioExport(job);
-  toast('MP3 download started', 'ok');
-}
-
-function showReady(job) {
+async function showReady(job) {
   const size = job.bytes ? formatBytes(job.bytes) : '';
   const length = job.durationSeconds ? formatDuration(job.durationSeconds) : '';
   const done = modal({
@@ -327,26 +317,44 @@ function showReady(job) {
     title: 'MP3 ready',
     body: `<p class="hint" style="margin-bottom:12px">MP3 file${length ? ` · ${length}` : ''}${size ? ` · ${size}` : ''} · ${job.bitrate} kbps${job.voice ? ` · ${job.voice}` : ''}</p>
       <p class="hint">The file is stored on this device until you download it, clear the library, or it expires after 7 days. It will still be here after a reload.</p>`,
-    foot: '<button class="btn btn-primary" data-download-book-audio>Download MP3</button>',
+    foot: '<button class="btn btn-primary" data-download-book-audio disabled>Preparing download…</button>',
   });
-  done.footEl.querySelector('[data-download-book-audio]').onclick = () => {
-    downloadJob(job).then(() => done.close('download')).catch(err => toast(err.message || 'Could not open the MP3.', 'err'));
+  const button = done.footEl.querySelector('[data-download-book-audio]');
+  let objectUrl = null;
+  try {
+    const dir = await jobsDir(false);
+    const handle = await dir.getFileHandle(`${job.id}.mp3`, { create: false });
+    const file = await handle.getFile();
+    objectUrl = URL.createObjectURL(file);
+    button.disabled = false;
+    button.textContent = 'Download MP3';
+  } catch (err) {
+    button.textContent = 'Download unavailable';
+    toast(err.message || 'Could not open the finished MP3.', 'err');
+    return done;
+  }
+  button.onclick = () => {
+    triggerFileDownload(objectUrl, job.filename);
+    done.close('download');
+    job.downloadedAt = Date.now();
+    db.putAudioExport(job).catch(() => {});
+    toast('MP3 download started', 'ok');
   };
+  return done;
 }
 
-function progressModal() {
+function progressModal({ title = 'Creating the MP3', status = 'Preparing the voice and first chapter…' } = {}) {
   const m = modal({
     eyebrow: 'Download audio',
-    title: 'Creating the MP3',
-    body: '<div class="backup-status"><div class="backup-pct" id="bookAudioPct">0%</div><p id="bookAudioStatus">Preparing the voice and first chapter…</p><button class="btn btn-sm" data-cancel-book-audio style="margin-top:14px">Cancel</button></div><p class="hint" style="margin-top:10px">Local speech generation can take a while. Progress is saved after every chapter, so a reload will not lose it. Pause narration to let the export run at full speed.</p>',
+    title,
+    body: `<div class="backup-status"><div class="backup-pct" id="bookAudioPct">0%</div><p id="bookAudioStatus">${status}</p><button class="btn btn-sm" data-cancel-book-audio style="margin-top:14px">Cancel</button></div><p class="hint" style="margin-top:10px">Local speech generation can take a while. Progress is saved after every chapter, so a reload will not lose it. Pause narration to let the export run at full speed.</p>`,
     dismissible: false,
   });
   return m;
 }
 
-async function runWithModal(job, chapters) {
-  const progress = progressModal();
-  const token = { cancelled: false };
+async function runWithModal(job, chapters, { progress = null, token = { cancelled: false } } = {}) {
+  progress ||= progressModal();
   const pct = progress.bodyEl.querySelector('#bookAudioPct');
   const status = progress.bodyEl.querySelector('#bookAudioStatus');
   let generationStarted = false;
@@ -398,24 +406,38 @@ async function resumeWithModal(job) {
     toast('The book for this audio export is no longer in the library.', 'err');
     return;
   }
-  const prepared = await prepareExport(book, job.scope || 'book');
+  let prepared = null;
+  let progress = progressModal({ title: 'Resuming the MP3', status: 'Reading chapters and checking saved progress…' });
+  const token = { cancelled: false };
+  progress.bodyEl.querySelector('[data-cancel-book-audio]').onclick = () => {
+    token.cancelled = true;
+    progress.close('cancel');
+    toast('MP3 export paused. Use Download audio to resume it.', 'info');
+  };
   try {
+    prepared = await prepareExport(book, job.scope || 'book');
+    if (token.cancelled) return;
     if (prepared.totalSentences !== job.totalSentences) {
       job.chapterIndex = 0;
       job.doneSentences = 0;
       job.durationSeconds = 0;
       job.totalSentences = prepared.totalSentences;
       job.chapters = prepared.chapters.length;
+      job.pendingAppend = null;
       await db.putAudioExport(job);
     }
-    await runWithModal(job, prepared.chapters);
+    await runWithModal(job, prepared.chapters, { progress, token });
+    progress = null;
+  } catch (err) {
+    if (progress) progress.close('error');
+    if (!token.cancelled) toast(err.message || 'Could not resume the MP3 export.', 'err');
   } finally {
-    disposeBuilt(prepared);
+    if (prepared) disposeBuilt(prepared);
   }
 }
 
 async function legacyDownload(book) {
-  const prepared = await prepareExport(book, job.scope || 'book');
+  const prepared = await prepareExport(book, 'book');
   const estimatedMb = Math.round((prepared.seconds * 128 * 1000) / 8 / (1024 * 1024));
   if (estimatedMb > 350) {
     disposeBuilt(prepared);
@@ -488,7 +510,9 @@ export async function downloadBookAudio(book, { scope = 'book', state = null, vo
   }
 
   window.lumen?.pauseTTS?.();
-
+  let prepared = null;
+  let progress = null;
+  let token = null;
   try {
     const jobs = await db.listAudioExports();
     const matches = job => job.bookId === book.id
@@ -501,7 +525,7 @@ export async function downloadBookAudio(book, { scope = 'book', state = null, vo
       try {
         const dir = await jobsDir(false);
         await dir.getFileHandle(`${existing.id}.mp3`, { create: false });
-        showReady(existing);
+        await showReady(existing);
         return;
       } catch {
         await removeJob(existing);
@@ -514,32 +538,48 @@ export async function downloadBookAudio(book, { scope = 'book', state = null, vo
     const stale = jobs.filter(job => matches(job));
     for (const job of stale) await removeJob(job);
 
-    const prepared = await prepareExport(book, scope, state);
+    // Show work immediately; parsing a large book can take long enough that
+    // an otherwise blank screen looks like a crash on iPhone.
+    progress = progressModal({ title: 'Preparing the MP3', status: 'Reading the book and estimating audio length…' });
+    token = { cancelled: false };
+    progress.bodyEl.querySelector('[data-cancel-book-audio]').onclick = () => {
+      token.cancelled = true;
+      progress.close('cancel');
+      toast('MP3 export cancelled', 'info');
+    };
+    prepared = await prepareExport(book, scope, state);
+    if (token.cancelled) return;
+
     const bitrate = chooseBitrate(prepared.seconds);
     const estimatedMb = Math.round((prepared.seconds * bitrate * 1000) / 8 / (1024 * 1024));
-    let proceed = true;
     if (estimatedMb > 350) {
-      proceed = await confirmDialog({
+      progress.close('size-warning');
+      progress = null;
+      const proceed = await confirmDialog({
         title: 'Create a large MP3?',
-        message: `This book will produce about ${estimatedMb} MB of audio (${formatDuration(prepared.seconds)}) at ${bitrate} kbps. Large exports can take a long time and need plenty of free space.`,
-        confirmLabel: 'Create MP3',
+        message: `This book contains about ${formatDuration(prepared.seconds)} of speech and will produce roughly ${estimatedMb} MB at ${bitrate} kbps. The source EPUB/PDF may be small; MP3 size depends on its spoken length. Piper generates audio on this device, so it can take hours. Progress resumes after a reload.`,
+        confirmLabel: `Create ${estimatedMb} MB MP3`,
         cancelLabel: 'Cancel',
         danger: false,
       });
-    }
-    if (!proceed) {
-      disposeBuilt(prepared);
-      return;
+      if (!proceed) return;
+      progress = progressModal({ title: 'Creating the MP3', status: 'Preparing the fast voice…' });
+      token = { cancelled: false };
+      progress.bodyEl.querySelector('[data-cancel-book-audio]').onclick = () => {
+        token.cancelled = true;
+        progress.close('cancel');
+        toast('MP3 export cancelled', 'info');
+      };
     }
 
     const job = await createJob(book, prepared.chapters, prepared.totalSentences, prepared.seconds, { scope, voiceId, speaker });
-    try {
-      await runWithModal(job, prepared.chapters);
-    } finally {
-      disposeBuilt(prepared);
-    }
+    await runWithModal(job, prepared.chapters, { progress, token });
+    progress = null;
   } catch (err) {
-    toast(err.message || 'Could not start the audio export.', 'err');
+    if (progress) progress.close('error');
+    if (!token?.cancelled) toast(err.message || 'Could not start the audio export.', 'err');
+  } finally {
+    if (prepared) disposeBuilt(prepared);
   }
 }
 
@@ -599,7 +639,7 @@ export async function resumeAudioExports() {
       toast('Your MP3 is ready to download.', 'ok', {
         actionLabel: 'Download',
         duration: 15000,
-        onAction: () => showReady(ready),
+        onAction: () => { showReady(ready).catch(err => toast(err.message || 'Could not open the MP3.', 'err')); },
       });
     }
   } catch (err) {

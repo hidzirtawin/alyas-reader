@@ -8,7 +8,7 @@ import {
 import { buildReflowable, buildComicBook, isComicFormat } from './renderers.js';
 import { PdfView } from './pdfview.js';
 import { ComicView } from './comicview.js';
-import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName, getPiperVoices, previewSpeech, stopPreview, warmPiperEngine } from './tts.js';
+import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName, getPiperVoices, previewSpeech, stopPreview, warmPiperEngine, audioContext } from './tts.js';
 import {
   toast, modal, confirmDialog, contextMenu, closeAllModals, shortcutsModal,
   formatLabel, isModalOpen,
@@ -85,12 +85,24 @@ export function restoreReadingSession(app) {
     // A reload has no user gesture, and iOS will not unlock audio. Prepare
     // the saved sentence paused so the first tap starts narration immediately
     // instead of silently loading the voice for minutes.
-    setTimeout(() => {
+    setTimeout(async () => {
       if (!window.lumen?.reader) return;
-      try {
-        window.lumen.prepareTTS?.();
-        window.lumen.showResumeBanner?.();
-      } catch {}
+      try { await window.lumen.prepareTTS?.(); } catch {}
+      // Try to continue automatically. The banner is only a fallback for
+      // browsers that keep the audio context locked until a gesture.
+      try { window.lumen.resumeTTS?.(); } catch {}
+      setTimeout(() => {
+        const state = window.lumen?.reader;
+        const engine = state?.engine;
+        const ctx = audioContext?.();
+        const blocked = (ctx && ctx.state !== 'running')
+          || !engine
+          || engine.state === 'idle'
+          || engine.state === 'paused';
+        if (!blocked) return;
+        try { engine?.pause?.(); } catch {}
+        window.lumen?.showResumeBanner?.();
+      }, 2500);
     }, 1600);
   }
   return true;
@@ -1815,7 +1827,7 @@ function showResumeBanner(state) {
     banner = document.createElement('div');
     banner.id = 'resumeBanner';
     banner.className = 'resume-banner';
-    banner.innerHTML = '<span>Narration paused at your saved place.</span><button class="btn btn-sm btn-primary" data-resume-play>Play</button><button class="icon-btn" data-resume-dismiss aria-label="Dismiss">×</button>';
+    banner.innerHTML = '<span>Tap to start narration at your saved place.</span><button class="btn btn-sm btn-primary" data-resume-play>Play</button><button class="icon-btn" data-resume-dismiss aria-label="Dismiss">×</button>';
     refs.reader.appendChild(banner);
     banner.querySelector('[data-resume-play]').onclick = () => {
       hideResumeBanner();

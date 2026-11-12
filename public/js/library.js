@@ -4,7 +4,7 @@ import { db } from './db.js';
 import { detectFormat, unsupportedMessage, probeFile } from './renderers.js';
 import { getPrefs, savePrefs } from './prefs.js';
 import { openBookDetails } from './details.js';
-import { downloadBookAudio } from './audioexport.js?v=voicecache1';
+import { downloadBookAudio } from './audioexport.js';
 import {
   toast, modal, contextMenu, confirmDialog, coverBox, coverHTML, formatLabel,
 } from './ui.js';

@@ -3,7 +3,7 @@
 const BUILD = document.querySelector('meta[name="app-build"]')?.content || '1.0';
 
 import { db } from './db.js';
-import { clearAudioExports } from './audioexport.js?v=voicecache1';
+import { clearAudioExports } from './audioexport.js';
 import { clearNarrationCache, narrationCacheStats } from './audiocache.js';
 import {
   getPrefs, savePrefs, setReaderPrefs, FONTS, THEMES, DEFAULT_READER, DYSLEXIA_READER,
@@ -14,7 +14,7 @@ import {
   onPiperProgress, piperProgressLabel,
   listCachedVoices, deleteCachedVoice, clearCachedVoices,
   importCustomVoice, removeCustomVoice,
-} from './tts.js?v=voicecache1';
+} from './tts.js';
 import {
   modal, toast, confirmDialog,
 } from './ui.js';

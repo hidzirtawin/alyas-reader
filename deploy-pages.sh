@@ -24,6 +24,20 @@ html = index.read_text()
 html = re.sub(r'(<meta name="app-build" content=")[^"]*(")', rf'\g<1>{build}\g<2>', html)
 html = re.sub(r'\?v=[^"\']*', f'?v={build}', html)
 index.write_text(html)
+
+# Stamp every internal module import with this build. GitHub Pages keeps its own
+# HTTP cache for a few minutes, so without this the browser can run an old copy
+# of one module next to a new copy of another and the app misbehaves.
+# Only same-folder app modules are stamped; vendored runtimes keep their
+# immutable URLs so a 44 MB Piper bundle is never re-downloaded for this.
+specifier = re.compile(r"""(from\s+|import\s*\()(['"])(\./[\w./-]+\.js)(?:\?v=[^'"]*)?(['"])""")
+for path in (tmp / 'js').rglob('*.js'):
+    source = path.read_text()
+    stamped = specifier.sub(
+        lambda m: f'{m.group(1)}{m.group(2)}{m.group(3)}?v={build}{m.group(4)}', source)
+    if stamped != source:
+        path.write_text(stamped)
+
 (tmp / 'version.json').write_text(json.dumps({'build': build, 'name': "Alya's Reader"}) + '\n')
 sw = tmp / 'sw.js'
 if sw.exists():

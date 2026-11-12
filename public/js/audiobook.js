@@ -1,7 +1,7 @@
 /* Local audiobook export. Renders with the selected Piper voice and
    downloads either one MP3 file or MP3 chapters in a zip with a playlist. */
 
-import { piperGenerate, piperVoiceById, piperSpeakerName, cleanForSpeech } from './tts.js?v=voicecache1';
+import { piperGenerate, piperVoiceById, piperSpeakerName, cleanForSpeech } from './tts.js';
 import { getPrefs } from './prefs.js';
 import { detectSentenceSegments, splitLongText } from './util.js';
 

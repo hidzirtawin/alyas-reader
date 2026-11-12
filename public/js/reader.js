@@ -8,17 +8,17 @@ import {
 import { buildReflowable, buildComicBook, isComicFormat } from './renderers.js';
 import { PdfView } from './pdfview.js';
 import { ComicView } from './comicview.js';
-import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName, getPiperVoices, previewSpeech, stopPreview, warmPiperEngine, audioContext } from './tts.js?v=voicecache1';
+import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName, getPiperVoices, previewSpeech, stopPreview, warmPiperEngine, audioContext } from './tts.js';
 import {
   toast, modal, confirmDialog, contextMenu, closeAllModals, shortcutsModal,
   formatLabel, isModalOpen,
 } from './ui.js';
 import { openBookDetails } from './details.js';
-import { downloadBookAudio } from './audioexport.js?v=voicecache1';
-import { openVoiceModal } from './settings.js?v=voicecache1';
+import { downloadBookAudio } from './audioexport.js';
+import { openVoiceModal } from './settings.js';
 import { openDictionary } from './dictionary.js';
 import { getSleepTimer, startSleepTimer, cancelSleepTimer, formatSleepRemaining } from './sleep.js';
-import { createAudiobook, audiobookChapters } from './audiobook.js?v=voicecache1';
+import { createAudiobook, audiobookChapters } from './audiobook.js';
 import { baseLanguage, languageName, languageMatches } from './language.js';
 import {
   $, esc, icon, clamp, debounce, uid, normalizedText,

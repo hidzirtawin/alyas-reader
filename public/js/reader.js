@@ -101,7 +101,7 @@ export function restoreReadingSession(app) {
           || engine.state === 'paused';
         if (!blocked) return;
         try { engine?.pause?.(); } catch {}
-        window.lumen?.showResumeBanner?.();
+        window.lumen?.armAutoStart?.();
       }, 2500);
     }, 1600);
   }
@@ -219,6 +219,7 @@ export async function openReader(app, bookId, target = {}) {
   updateReaderVoiceChip(state);
   app.pauseTTS = () => state.engine?.pause();
   app.resumeTTS = () => {
+    cancelAutoStart(state);
     state.resumePending = false;
     const engine = state.engine;
     if (engine?.sentences?.length && engine.state !== 'playing' && engine.state !== 'loading') {
@@ -234,6 +235,7 @@ export async function openReader(app, bookId, target = {}) {
     return startTTS(state, { autoplay: false, paused: true });
   };
   app.showResumeBanner = () => showResumeBanner(state);
+  app.armAutoStart = () => armAutoStart(state);
   app.stopTTS = () => { state.engine?.stop(); closeTTS(state); };
 
   try {
@@ -264,6 +266,7 @@ export async function closeReader({ skipReload = false, skipSave = false } = {})
   try { closeAllModals(); } catch {}
   try { state.cleanup.forEach(fn => fn()); } catch {}
 
+  cancelAutoStart(state);
   hideResumeBanner();
   if (state.resumeBannerTimer) clearTimeout(state.resumeBannerTimer);
   try { state.engine?.destroy(); } catch {}
@@ -305,7 +308,7 @@ export async function closeReader({ skipReload = false, skipSave = false } = {})
   document.body.classList.remove('reader-open');
   const shell = document.querySelector('.shell');
   if (shell) shell.inert = false;
-  if (state.app) { state.app.pauseTTS = null; state.app.resumeTTS = null; state.app.prepareTTS = null; state.app.showResumeBanner = null; state.app.stopTTS = null; }
+  if (state.app) { state.app.pauseTTS = null; state.app.resumeTTS = null; state.app.prepareTTS = null; state.app.showResumeBanner = null; state.app.armAutoStart = null; state.app.stopTTS = null; }
   clearReadingSession();
   if (!skipReload) await state.app.reload();
 }
@@ -1527,6 +1530,7 @@ function openDock(state) {
 }
 
 function closeTTS(state, { hideDock = true } = {}) {
+  cancelAutoStart(state);
   state.resumePending = false;
   state.engine?.stop();
   rememberReadingSession(state);
@@ -1820,6 +1824,33 @@ function scrollRangeIntoView(range) {
   }
 }
 
+function cancelAutoStart(state) {
+  if (state?.autoStartCleanup) {
+    try { state.autoStartCleanup(); } catch {}
+    state.autoStartCleanup = null;
+  }
+}
+
+function armAutoStart(state) {
+  if (!state || state.destroyed) return;
+  cancelAutoStart(state);
+  const start = event => {
+    if (event?.target?.closest?.('#resumeBanner')) return;
+    cancelAutoStart(state);
+    hideResumeBanner();
+    window.lumen?.resumeTTS?.();
+  };
+  state.autoStartCleanup = () => {
+    document.removeEventListener('pointerdown', start, true);
+    document.removeEventListener('touchstart', start, true);
+    document.removeEventListener('keydown', start, true);
+  };
+  document.addEventListener('pointerdown', start, true);
+  document.addEventListener('touchstart', start, true);
+  document.addEventListener('keydown', start, true);
+  showResumeBanner(state);
+}
+
 function showResumeBanner(state) {
   if (!state || state.destroyed || !refs?.reader) return;
   let banner = document.getElementById('resumeBanner');
@@ -1827,7 +1858,7 @@ function showResumeBanner(state) {
     banner = document.createElement('div');
     banner.id = 'resumeBanner';
     banner.className = 'resume-banner';
-    banner.innerHTML = '<span>Tap to start narration at your saved place.</span><button class="btn btn-sm btn-primary" data-resume-play>Play</button><button class="icon-btn" data-resume-dismiss aria-label="Dismiss">×</button>';
+    banner.innerHTML = '<span>Autoplay is blocked. Tap anywhere to start narration.</span><button class="btn btn-sm btn-primary" data-resume-play>Play</button><button class="icon-btn" data-resume-dismiss aria-label="Dismiss">×</button>';
     refs.reader.appendChild(banner);
     banner.querySelector('[data-resume-play]').onclick = () => {
       hideResumeBanner();
@@ -1841,6 +1872,7 @@ function showResumeBanner(state) {
 function hideResumeBanner() {
   const banner = document.getElementById('resumeBanner');
   if (banner) banner.hidden = true;
+  cancelAutoStart(S);
 }
 
 function updateTTSState(state, st) {

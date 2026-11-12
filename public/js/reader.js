@@ -230,6 +230,7 @@ export async function openReader(app, bookId, target = {}) {
     else await openReflowBook(state);
     rememberReadingSession(state);
     if (state.target.audiobook) setTimeout(() => { if (S === state) openAudiobookDialog(state); }, 650);
+    setTimeout(() => { if (!state.destroyed) prefetchOpeningAudio(state).catch(() => {}); }, 1100);
   } catch (err) {
     console.error('Could not open book', err);
     if (!state.destroyed) showReaderError(state, err.message || 'This book could not be opened.');
@@ -1590,6 +1591,29 @@ function applyBookVoice(state) {
     toast(`Using ${match.name} for this ${languageName(bookLang)} book`, 'info');
     state.languageVoiceNotice = true;
   }
+}
+
+async function prefetchOpeningAudio(state) {
+  if (!state || state.destroyed || state.mode === 'comic') return;
+  const tts = getPrefs().tts;
+  if (!tts.enabled || tts.provider !== 'piper') return;
+  applyBookVoice(state);
+  try {
+    let sentences = [];
+    if (state.mode === 'pdf') {
+      sentences = await state.pdfView.getPageSentences(state.page || 1);
+    } else {
+      sentences = buildChapterSentences(state);
+    }
+    if (!sentences.length) return;
+    let start = state.mode === 'pdf' ? 0 : firstVisibleSentence(state, sentences);
+    if (state.resumePoint && state.resumePoint.chapterIndex === state.chapterIndex) {
+      start = Math.max(0, state.resumePoint.sentenceIndex || 0);
+    }
+    const texts = sentences.slice(start, start + 3).map(sentence => sentence.text);
+    if (!texts.length) return;
+    state.engine?.prefetchTexts(texts);
+  } catch {}
 }
 
 async function startTTS(state, { autoplay = true, start = null, startFraction = null, paused = false } = {}) {

@@ -146,7 +146,7 @@ async function removeJob(job) {
   } catch {}
 }
 
-function chapterChunks(sentences, maxChars = 800) {
+function chapterChunks(sentences, maxChars = 500) {
   const chunks = [];
   let text = '';
   let count = 0;
@@ -163,6 +163,19 @@ function chapterChunks(sentences, maxChars = 800) {
   }
   if (text) chunks.push({ text, count });
   return chunks;
+}
+
+async function waitForNarration(token, onProgress, info) {
+  const engine = window.lumen?.reader?.engine;
+  if (!engine) return;
+  let notified = false;
+  while (!token.cancelled && (engine.state === 'playing' || engine.state === 'loading')) {
+    if (!notified) {
+      notified = true;
+      onProgress({ ...info, phase: 'waiting' });
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
 }
 
 async function runJob(job, chapters, { onProgress = () => {}, token = { cancelled: false } } = {}) {
@@ -190,6 +203,19 @@ async function runJob(job, chapters, { onProgress = () => {}, token = { cancelle
       let chapterSeconds = 0;
       let chapterDone = 0;
       for (const chunk of chunks) {
+        if (token.cancelled) {
+          const err = new Error('Audio export cancelled.');
+          err.cancelled = true;
+          throw err;
+        }
+        await waitForNarration(token, onProgress, {
+          percent: Math.min(92, Math.round(((done + chapterDone) / Math.max(1, job.totalSentences)) * 90)),
+          chapter: ci + 1,
+          chapters: chapters.length,
+          sentence: done + chapterDone,
+          sentences: job.totalSentences,
+          elapsed: duration + chapterSeconds,
+        });
         if (token.cancelled) {
           const err = new Error('Audio export cancelled.');
           err.cancelled = true;
@@ -336,7 +362,7 @@ function progressModal() {
   const m = modal({
     eyebrow: 'Download audio',
     title: 'Creating the MP3',
-    body: '<div class="backup-status"><div class="backup-pct" id="bookAudioPct">0%</div><p id="bookAudioStatus">Preparing the voice and first chapter…</p><button class="btn btn-sm" data-cancel-book-audio style="margin-top:14px">Cancel</button></div><p class="hint" style="margin-top:10px">Local speech generation can take a while. Progress is saved after every chapter, so a reload will not lose it.</p>',
+    body: '<div class="backup-status"><div class="backup-pct" id="bookAudioPct">0%</div><p id="bookAudioStatus">Preparing the voice and first chapter…</p><button class="btn btn-sm" data-cancel-book-audio style="margin-top:14px">Cancel</button></div><p class="hint" style="margin-top:10px">Local speech generation can take a while. Progress is saved after every chapter, so a reload will not lose it. Pause narration to let the export run at full speed.</p>',
     dismissible: false,
   });
   return m;
@@ -366,9 +392,11 @@ async function runWithModal(job, chapters) {
         if (!status) return;
         status.textContent = p.phase === 'encoding'
           ? 'Joining the chapters into one MP3…'
-          : p.phase === 'done'
-            ? 'MP3 ready'
-            : `Chapter ${p.chapter || 1} of ${p.chapters || 1}${p.sentences ? ` · sentence ${p.sentence} of ${p.sentences}` : ''}`;
+          : p.phase === 'waiting'
+            ? 'Paused while narration is playing. Pause narration for a faster export.'
+            : p.phase === 'done'
+              ? 'MP3 ready'
+              : `Chapter ${p.chapter || 1} of ${p.chapters || 1}${p.sentences ? ` · sentence ${p.sentence} of ${p.sentences}` : ''}`;
       },
     });
     progress.close('done');

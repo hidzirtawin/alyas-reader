@@ -1576,7 +1576,7 @@ export class SpeechEngine {
   /* Generate upcoming text without changing the current sentence. */
   prefetchTexts(texts = []) {
     if (this.provider !== 'piper') return;
-    for (const text of texts.slice(0, 5)) {
+    for (const text of texts.slice(0, 3)) {
       const clean = cleanForSpeech(text);
       if (!clean) continue;
       const chunk = splitLongText(clean, 800)[0];
@@ -1641,7 +1641,7 @@ export class SpeechEngine {
   }
 
   _trimDecoded() {
-    while (this._decoded.size > 6) {
+    while (this._decoded.size > 4) {
       const oldest = this._decoded.keys().next().value;
       this._decoded.delete(oldest);
     }
@@ -1651,7 +1651,7 @@ export class SpeechEngine {
     if (this.provider !== 'piper') return;
     // Generate several sentences ahead so playback does not wait between
     // sentences. These jobs yield to the sentence being spoken.
-    for (let d = 1; d <= 5; d++) {
+    for (let d = 1; d <= 3; d++) {
       const next = this.sentences[sentenceIndex + d];
       if (!next) break;
       const text = cleanForSpeech(next.text);
@@ -1668,9 +1668,9 @@ export class SpeechEngine {
   }
 
   _trimCache() {
-    if (this._cache.size <= 16) return;
+    if (this._cache.size <= 12) return;
     const entries = [...this._cache.entries()].sort((a, b) => a[1].at - b[1].at);
-    while (this._cache.size > 12 && entries.length) {
+    while (this._cache.size > 8 && entries.length) {
       const [key, entry] = entries.shift();
       this._cache.delete(key);
       this._decoded.delete(key);

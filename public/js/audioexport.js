@@ -6,8 +6,8 @@
 import { db } from './db.js';
 import { getPrefs } from './prefs.js';
 import { buildReflowable } from './renderers.js';
-import { prepareAudiobook, renderSentenceMp3, safeName, createAudiobook } from './audiobook.js';
-import { piperVoiceById, piperSpeakerName } from './tts.js';
+import { prepareAudiobook, renderSentenceWav, Mp3StreamEncoder, safeName, createAudiobook } from './audiobook.js';
+import { piperVoiceById, piperSpeakerName, onPiperProgress, piperProgressLabel } from './tts.js';
 import { modal, confirmDialog, toast } from './ui.js';
 import {
   downloadBlob, formatBytes, countWords, detectSentenceSegments,
@@ -146,6 +146,25 @@ async function removeJob(job) {
   } catch {}
 }
 
+function chapterChunks(sentences, maxChars = 800) {
+  const chunks = [];
+  let text = '';
+  let count = 0;
+  for (const sentence of sentences) {
+    const clean = String(sentence || '').trim();
+    if (!clean) continue;
+    if (text && text.length + clean.length + 1 > maxChars) {
+      chunks.push({ text, count });
+      text = '';
+      count = 0;
+    }
+    text += (text ? ' ' : '') + clean;
+    count++;
+  }
+  if (text) chunks.push({ text, count });
+  return chunks;
+}
+
 async function runJob(job, chapters, { onProgress = () => {}, token = { cancelled: false } } = {}) {
   const dir = await jobsDir(true);
   let jobDir;
@@ -164,21 +183,24 @@ async function runJob(job, chapters, { onProgress = () => {}, token = { cancelle
   try {
     for (let ci = job.chapterIndex; ci < chapters.length; ci++) {
       const chapter = chapters[ci];
-      // Encode the chapter into a bounded in-memory buffer, then write it
-      // once. Keeping a writable open during generation can leave a stale
-      // OPFS lock after an iOS reload.
-      let parts = [];
+      // Batch sentences into larger synthesis calls and feed one encoder
+      // per chapter. This cuts the per-call Piper and MP3 setup overhead.
+      const chunks = chapterChunks(chapter.sentences);
+      let encoder = null;
       let chapterSeconds = 0;
-      for (let si = 0; si < chapter.sentences.length; si++) {
+      let chapterDone = 0;
+      for (const chunk of chunks) {
         if (token.cancelled) {
           const err = new Error('Audio export cancelled.');
           err.cancelled = true;
           throw err;
         }
-        const { blob, seconds } = await renderSentenceMp3(chapter.sentences[si], job.voiceId, job.speaker, job.bitrate);
-        parts.push(new Uint8Array(await blob.arrayBuffer()));
-        chapterSeconds += seconds;
-        const completed = done + si + 1;
+        const wav = await renderSentenceWav(chunk.text, job.voiceId, job.speaker);
+        encoder ||= new Mp3StreamEncoder(wav.fmt, job.bitrate);
+        encoder.push(wav.data);
+        chapterSeconds += wav.seconds;
+        chapterDone += chunk.count;
+        const completed = done + chapterDone;
         onProgress({
           phase: 'generating',
           percent: Math.min(92, Math.round((completed / Math.max(1, job.totalSentences)) * 90)),
@@ -189,10 +211,8 @@ async function runJob(job, chapters, { onProgress = () => {}, token = { cancelle
           elapsed: duration + chapterSeconds,
         });
       }
-      const chapterBytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
-      let at = 0;
-      for (const part of parts) { chapterBytes.set(part, at); at += part.length; }
-      parts = null;
+      const chapterBlob = encoder ? encoder.finish() : new Blob([], { type: 'audio/mpeg' });
+      const chapterBytes = new Uint8Array(await chapterBlob.arrayBuffer());
       const handle = await jobDir.getFileHandle(chapterFile(ci, job.attempts), { create: true });
       const writable = await handle.createWritable();
       await writable.write(chapterBytes);
@@ -316,7 +336,7 @@ function progressModal() {
   const m = modal({
     eyebrow: 'Download audio',
     title: 'Creating the MP3',
-    body: '<div class="backup-status"><div class="backup-pct" id="bookAudioPct">0%</div><p id="bookAudioStatus">Preparing the first chapter…</p><button class="btn btn-sm" data-cancel-book-audio style="margin-top:14px">Cancel</button></div>',
+    body: '<div class="backup-status"><div class="backup-pct" id="bookAudioPct">0%</div><p id="bookAudioStatus">Preparing the voice and first chapter…</p><button class="btn btn-sm" data-cancel-book-audio style="margin-top:14px">Cancel</button></div><p class="hint" style="margin-top:10px">Local speech generation can take a while. Progress is saved after every chapter, so a reload will not lose it.</p>',
     dismissible: false,
   });
   return m;
@@ -327,6 +347,12 @@ async function runWithModal(job, chapters) {
   const token = { cancelled: false };
   const pct = progress.bodyEl.querySelector('#bookAudioPct');
   const status = progress.bodyEl.querySelector('#bookAudioStatus');
+  let generationStarted = false;
+  const stopProgress = onPiperProgress(p => {
+    if (!generationStarted && status && (p.phase === 'downloading' || p.phase === 'preparing')) {
+      status.textContent = piperProgressLabel(p);
+    }
+  });
   progress.bodyEl.querySelector('[data-cancel-book-audio]').onclick = () => {
     token.cancelled = true;
   };
@@ -335,6 +361,7 @@ async function runWithModal(job, chapters) {
       token,
       onProgress: p => {
         if (token.cancelled && p.phase !== 'done') return;
+        if (p.phase === 'generating' || p.phase === 'chapter' || p.phase === 'encoding') generationStarted = true;
         if (pct) pct.textContent = `${p.percent || 0}%`;
         if (!status) return;
         status.textContent = p.phase === 'encoding'
@@ -355,6 +382,8 @@ async function runWithModal(job, chapters) {
     } else {
       toast(job.error || err.message || 'Audio export paused. It will resume when you reopen the app.', 'err');
     }
+  } finally {
+    stopProgress();
   }
 }
 

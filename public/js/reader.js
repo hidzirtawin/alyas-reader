@@ -67,15 +67,11 @@ export function restoreReadingSession(app) {
     // instead of silently loading the voice for minutes.
     setTimeout(() => {
       if (!window.lumen?.reader) return;
-      try { window.lumen.prepareTTS?.(); } catch {}
+      try {
+        window.lumen.prepareTTS?.();
+        window.lumen.showResumeBanner?.();
+      } catch {}
     }, 1600);
-    setTimeout(() => {
-      toast('Narration is ready at your saved place. Tap Play to continue.', 'info', {
-        actionLabel: 'Play',
-        duration: 20000,
-        onAction: () => window.lumen?.resumeTTS?.(),
-      });
-    }, 2400);
   }
   return true;
 }
@@ -186,6 +182,7 @@ export async function openReader(app, bookId, target = {}) {
   app.pauseTTS = () => state.engine?.pause();
   app.resumeTTS = () => startTTS(state, { autoplay: true });
   app.prepareTTS = () => startTTS(state, { autoplay: false, paused: true });
+  app.showResumeBanner = () => showResumeBanner(state);
   app.stopTTS = () => { state.engine?.stop(); closeTTS(state); };
 
   try {
@@ -215,6 +212,8 @@ export async function closeReader({ skipReload = false, skipSave = false } = {})
   try { closeAllModals(); } catch {}
   try { state.cleanup.forEach(fn => fn()); } catch {}
 
+  hideResumeBanner();
+  if (state.resumeBannerTimer) clearTimeout(state.resumeBannerTimer);
   try { state.engine?.destroy(); } catch {}
   try { state.pdfView?.destroy(); } catch {}
   try { state.comicView?.destroy(); } catch {}
@@ -254,7 +253,7 @@ export async function closeReader({ skipReload = false, skipSave = false } = {})
   document.body.classList.remove('reader-open');
   const shell = document.querySelector('.shell');
   if (shell) shell.inert = false;
-  if (state.app) { state.app.pauseTTS = null; state.app.resumeTTS = null; state.app.prepareTTS = null; state.app.stopTTS = null; }
+  if (state.app) { state.app.pauseTTS = null; state.app.resumeTTS = null; state.app.prepareTTS = null; state.app.showResumeBanner = null; state.app.stopTTS = null; }
   clearReadingSession();
   if (!skipReload) await state.app.reload();
 }
@@ -307,6 +306,8 @@ function getRefs() {
 }
 
 function resetReaderUI(state) {
+  hideResumeBanner();
+  if (state.resumeBannerTimer) { clearTimeout(state.resumeBannerTimer); state.resumeBannerTimer = null; }
   refs.bmBtn.classList.remove('is-on');
   refs.bmBtn.setAttribute('aria-pressed', 'false');
   refs.tocDrawer.classList.remove('is-open');
@@ -1664,7 +1665,7 @@ function prefetchNextChapter(state, index) {
   const nextIndex = state.chapterIndex + 1;
   if (nextIndex >= state.book.chapters.length || state.prefetchedChapter === nextIndex) return;
   if (!chapterHasBody(state.book.chapters[nextIndex])) return;
-  const texts = sentencesFromChapter(state.book.chapters[nextIndex]).slice(0, 1);
+  const texts = sentencesFromChapter(state.book.chapters[nextIndex]).slice(0, 3);
   if (!texts.length) return;
   state.prefetchedChapter = nextIndex;
   state.engine?.prefetchTexts(texts);
@@ -1715,6 +1716,29 @@ function scrollRangeIntoView(range) {
   }
 }
 
+function showResumeBanner(state) {
+  if (!state || state.destroyed || !refs?.reader) return;
+  let banner = document.getElementById('resumeBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'resumeBanner';
+    banner.className = 'resume-banner';
+    banner.innerHTML = '<span>Narration paused at your saved place.</span><button class="btn btn-sm btn-primary" data-resume-play>Play</button><button class="icon-btn" data-resume-dismiss aria-label="Dismiss">×</button>';
+    refs.reader.appendChild(banner);
+    banner.querySelector('[data-resume-play]').onclick = () => {
+      hideResumeBanner();
+      window.lumen?.resumeTTS?.();
+    };
+    banner.querySelector('[data-resume-dismiss]').onclick = () => hideResumeBanner();
+  }
+  banner.hidden = false;
+}
+
+function hideResumeBanner() {
+  const banner = document.getElementById('resumeBanner');
+  if (banner) banner.hidden = true;
+}
+
 function updateTTSState(state, st) {
   if (!refs) return;
   const btn = refs.ttsDock.querySelector('.tts-play');
@@ -1729,6 +1753,17 @@ function updateTTSState(state, st) {
   refs.ttsBtn.querySelector('span').textContent = playing ? 'Listening' : 'Listen';
   refs.ttsEq.classList.toggle('is-live', st === 'playing' || transitioning);
   if (st === 'playing') refs.ttsEq.classList.add('is-live');
+  if (st === 'playing' || st === 'loading') {
+    hideResumeBanner();
+    if (state.resumeBannerTimer) { clearTimeout(state.resumeBannerTimer); state.resumeBannerTimer = null; }
+  } else if (st === 'idle' && state.engine?._wantPlaying && state.engine?.sentences?.length) {
+    if (!state.resumeBannerTimer) {
+      state.resumeBannerTimer = setTimeout(() => {
+        state.resumeBannerTimer = null;
+        if (state.engine?.state === 'idle' && state.engine?._wantPlaying) showResumeBanner(state);
+      }, 1600);
+    }
+  }
   if (refs.ttsPercent && st !== 'loading') refs.ttsPercent.hidden = true;
   if (st === 'loading') {
     const e = state.engine;

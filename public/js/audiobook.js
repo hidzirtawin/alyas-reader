@@ -51,7 +51,7 @@ async function readWav(blob) {
   return { fmt, data };
 }
 
-class Mp3StreamEncoder {
+export class Mp3StreamEncoder {
   constructor(fmt, bitrate = 128) {
     const lame = window.lamejs;
     if (!lame?.Mp3Encoder) throw new Error('The MP3 encoder did not load. Reload the page and try again.');
@@ -151,6 +151,17 @@ export async function sentenceMp3(wavBlob, bitrate = 128) {
 export async function renderSentenceMp3(text, voiceId, speaker, bitrate = 128) {
   const wav = await piperGenerate(text, voiceId, speaker);
   return sentenceMp3(wav, bitrate);
+}
+
+export async function renderSentenceWav(text, voiceId, speaker) {
+  const wavBlob = await piperGenerate(text, voiceId, speaker);
+  const wav = await readWav(wavBlob);
+  const blockAlign = Math.max(1, Math.round(wav.fmt.channels * wav.fmt.bits / 8));
+  return {
+    data: wav.data,
+    fmt: wav.fmt,
+    seconds: wav.data.length / Math.max(1, wav.fmt.sampleRate * blockAlign),
+  };
 }
 
 export async function createAudiobook(state, {

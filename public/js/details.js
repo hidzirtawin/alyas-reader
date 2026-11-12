@@ -4,7 +4,7 @@ import { db } from './db.js';
 import { getPrefs } from './prefs.js';
 import { modal, confirmDialog, toast, coverBox, formatLabel } from './ui.js';
 import { formatDate, formatRelative } from './util.js';
-import { downloadBookAudio } from './audioexport.js?v=voicewarm1';
+import { downloadBookAudio } from './audioexport.js?v=voicecache1';
 
 export function openBookDetails(app, book, { fromReader = false } = {}) {
   if (!book) return;

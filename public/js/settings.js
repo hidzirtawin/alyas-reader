@@ -3,7 +3,8 @@
 const BUILD = document.querySelector('meta[name="app-build"]')?.content || '1.0';
 
 import { db } from './db.js';
-import { clearAudioExports } from './audioexport.js?v=voicewarm1';
+import { clearAudioExports } from './audioexport.js?v=voicecache1';
+import { clearNarrationCache, narrationCacheStats } from './audiocache.js';
 import {
   getPrefs, savePrefs, setReaderPrefs, FONTS, THEMES, DEFAULT_READER, DYSLEXIA_READER,
 } from './prefs.js';
@@ -13,7 +14,7 @@ import {
   onPiperProgress, piperProgressLabel,
   listCachedVoices, deleteCachedVoice, clearCachedVoices,
   importCustomVoice, removeCustomVoice,
-} from './tts.js?v=voicewarm1';
+} from './tts.js?v=voicecache1';
 import {
   modal, toast, confirmDialog,
 } from './ui.js';
@@ -200,7 +201,7 @@ export function renderSettings(app) {
             </div>
             <div class="callout" style="display:flex;gap:9px;padding:10px 12px;border-radius:9px;background:var(--surface-2);font-size:11px;line-height:1.5;color:var(--ink-2)">
               ${icon('shield')}
-              <span>Files are saved in this browser’s local database. They are never uploaded to Alya’s Reader or anyone else.</span>
+              <span>Alya’s Reader keeps files and narration clips in this browser. Only an outside tool you open yourself, such as Voice-Generator, receives a book or its text.</span>
             </div>
             <div class="set-row" style="margin-top:12px">
               <div>
@@ -208,6 +209,13 @@ export function renderSettings(app) {
                 <div class="set-sub" id="voiceStoreSub">Checking…</div>
               </div>
               <button class="btn btn-sm" id="manageVoices">Manage</button>
+            </div>
+            <div class="set-row" style="margin-top:12px">
+              <div>
+                <div class="set-label">Narration cache</div>
+                <div class="set-sub" id="narrationCacheSub">Checking…</div>
+              </div>
+              <button class="btn btn-sm" id="clearNarrationCache">Clear</button>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
               <button class="btn btn-sm btn-primary" id="backupLibrary">${icon('download')} Backup library</button>
@@ -243,6 +251,18 @@ export function renderSettings(app) {
   view.oninput = e => onSettingsInput(app, e);
   view.onchange = e => onSettingsChange(app, e);
   refreshVoiceStore();
+  refreshNarrationCache();
+}
+
+function refreshNarrationCache() {
+  const sub = $('#narrationCacheSub');
+  if (!sub) return;
+  narrationCacheStats().then(stats => {
+    if (!sub.isConnected) return;
+    sub.textContent = stats.clips
+      ? `${stats.clips} clip${stats.clips === 1 ? '' : 's'} · ${formatBytes(stats.bytes)} · replays start instantly`
+      : 'Empty · generated sentences are kept here for instant replay';
+  }).catch(() => { sub.textContent = 'Unavailable'; });
 }
 
 function refreshVoiceStore() {
@@ -347,6 +367,13 @@ function onSettingsClick(app, e) {
     toast('Reading appearance reset', 'ok');
     return;
   }
+  if (e.target.closest('#clearNarrationCache')) {
+    clearNarrationCache().then(() => {
+      refreshNarrationCache();
+      toast('Narration cache cleared', 'ok');
+    }).catch(() => toast('Could not clear the narration cache.', 'err'));
+    return;
+  }
   if (e.target.closest('#showShortcuts')) { app.showShortcuts?.(); return; }
   if (e.target.closest('#manageVoices')) { openVoiceManager(app); return; }
   if (e.target.closest('#backupLibrary')) { backupLibrary(app); return; }
@@ -360,6 +387,7 @@ function onSettingsClick(app, e) {
     }).then(async ok => {
       if (!ok) return;
       await clearAudioExports();
+      await clearNarrationCache();
       await db.clearAll();
       app.bookmarks = [];
       app.highlights = [];

@@ -6,8 +6,8 @@
 import { db } from './db.js';
 import { getPrefs } from './prefs.js';
 import { buildReflowable } from './renderers.js';
-import { prepareAudiobook, renderSentenceWav, Mp3StreamEncoder, safeName, createAudiobook } from './audiobook.js?v=voicewarm1';
-import { piperVoiceById, piperSpeakerName, onPiperProgress, piperProgressLabel } from './tts.js?v=voicewarm1';
+import { prepareAudiobook, renderSentenceWav, Mp3StreamEncoder, safeName, createAudiobook } from './audiobook.js?v=voicecache1';
+import { piperVoiceById, piperSpeakerName, onPiperProgress, piperProgressLabel } from './tts.js?v=voicecache1';
 import { modal, confirmDialog, toast } from './ui.js';
 import {
   downloadBlob, formatBytes, countWords, detectSentenceSegments, splitLongText,

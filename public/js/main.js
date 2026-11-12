@@ -2,15 +2,15 @@
 
 import { db } from './db.js';
 import { applyPrefs, getPrefs } from './prefs.js';
-import { renderLibrary, importFiles, refreshImportQueue } from './library.js?v=voiceicons1';
+import { renderLibrary, importFiles, refreshImportQueue } from './library.js?v=voicecache1';
 import { renderMarks } from './bookmarks.js';
-import { renderSettings } from './settings.js?v=voiceicons1';
+import { renderSettings } from './settings.js?v=voicecache1';
 import { openReader, closeReader, restoreReadingSession } from './reader.js';
 import { shortcutsModal, toast } from './ui.js';
 import { openBookSources } from './sources.js';
 import { startSleepTimer, cancelSleepTimer, getSleepTimer, formatSleepRemaining } from './sleep.js';
-import { loadPiperCatalog, warmPiperEngine, onPiperProgress, piperProgressLabel } from './tts.js?v=voicewarm1';
-import { resumeAudioExports } from './audioexport.js?v=voicewarm1';
+import { loadPiperCatalog, warmPiperEngine, onPiperProgress, piperProgressLabel } from './tts.js?v=voicecache1';
+import { resumeAudioExports } from './audioexport.js?v=voicecache1';
 import { $, $$, clamp, formatBytes, debounce, icon } from './util.js';
 
 const app = {

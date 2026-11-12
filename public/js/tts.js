@@ -5,6 +5,7 @@
 
 import { getPrefs, setTtsPrefs } from './prefs.js';
 import { splitLongText } from './util.js';
+import { getCachedClip, putCachedClip } from './audiocache.js';
 
 const PREFERRED = [
   'samantha', 'ava', 'serena', 'daniel', 'karen', 'moira', 'tessa', 'alex',
@@ -1651,16 +1652,25 @@ export class SpeechEngine {
     const tts = getPrefs().tts;
     const voiceId = this.voice?.voiceId || tts.piperVoice;
     const speaker = this.voice?.voiceId ? (this.voice.speaker ?? 0) : tts.piperSpeaker;
-    const promise = piperGenerate(text, voiceId, speaker, { priority: urgent ? 0 : 2, key })
-      .then(blob => {
-        const url = URL.createObjectURL(blob);
-        const entry = { url, blob, key, at: Date.now() };
+    const promise = (async () => {
+      // A clip generated earlier can be reused even though the voice engine is
+      // still cold, so reopening a book no longer waits for Piper to load.
+      const stored = await getCachedClip(key).catch(() => null);
+      if (stored) {
+        const entry = { url: URL.createObjectURL(stored), blob: stored, key, at: Date.now() };
         this._cache.set(key, entry);
         this._trimCache();
         this._prepareDecoded(entry);
         return entry;
-      })
-      .finally(() => this._inFlight.delete(key));
+      }
+      const blob = await piperGenerate(text, voiceId, speaker, { priority: urgent ? 0 : 2, key });
+      putCachedClip(key, blob).catch(() => {});
+      const entry = { url: URL.createObjectURL(blob), blob, key, at: Date.now() };
+      this._cache.set(key, entry);
+      this._trimCache();
+      this._prepareDecoded(entry);
+      return entry;
+    })().finally(() => this._inFlight.delete(key));
 
     this._inFlight.set(key, promise);
     return promise;

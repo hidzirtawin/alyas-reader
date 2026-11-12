@@ -3173,7 +3173,7 @@ function openGoTo(state) {
 function openMoreMenu(state) {
   const rect = refs.moreBtn.getBoundingClientRect();
   contextMenu(rect.right - 8, rect.bottom + 8, [
-    { label: 'Go to page…', icon: 'list', onSelect: () => openGoTo(state) },
+    { label: state.mode === 'reflow' ? 'Go to another chapter…' : 'Go to page…', icon: 'list', onSelect: () => openGoTo(state) },
     ...(state.mode !== 'comic' ? [{ label: 'Search in book…', icon: 'search', onSelect: () => openBookSearch(state) }] : []),
     ...(state.mode !== 'comic' ? [{ label: 'Make audiobook chapters…', icon: 'loudhailer', onSelect: () => openAudiobookDialog(state) }] : []),
     {
@@ -3181,7 +3181,6 @@ function openMoreMenu(state) {
       icon: 'moon',
       onSelect: () => openSleepDialog(state),
     },
-    { label: 'Book details', icon: 'info', onSelect: () => openBookDetails(state.app, state.record, { fromReader: true }) },
     { label: 'Download audio', icon: 'download', onSelect: () => downloadBookAudio(state.record) },
     { label: 'Keyboard shortcuts', icon: 'keyboard', onSelect: () => shortcutsModal() },
     { sep: true },

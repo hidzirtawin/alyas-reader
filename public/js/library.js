@@ -120,17 +120,18 @@ function heroMarkup(app, { book, progress }) {
   const narration = getPrefs().tts.enabled && !['cbz', 'cbr'].includes(book.format);
   const wash = book.cover ? ` style="background-image:url('${esc(book.cover)}')"` : '';
   return `
-    <section class="hero" aria-label="Continue reading">
+    <section class="hero" aria-label="Audiobook actions">
       ${book.cover ? `<div class="hero-wash"${wash}></div>` : ''}
       <div class="hero-cover">${coverBox(book)}</div>
       <div class="hero-body">
-        <div class="hero-kicker">${icon(started ? 'clock' : 'book')} ${started ? 'Continue reading' : 'From your library'}</div>
+        <div class="hero-kicker">${icon(started ? 'clock' : 'loudhailer')} ${started ? 'Continue listening' : 'Ready to make audio'}</div>
         <h2 class="hero-title">${esc(book.title || 'Untitled')}</h2>
         <p class="hero-author">${esc(book.author || 'Unknown author')}</p>
-        ${started ? `<div class="hero-meter"><div class="bar"><i style="width:${percent}%"></i></div><span>${percent}% read</span></div>` : ''}
+        ${started ? `<div class="hero-meter"><div class="bar"><i style="width:${percent}%"></i></div><span>${percent}% complete</span></div>` : ''}
         <div class="hero-actions">
-          <button class="btn btn-primary" data-hero-open>${icon('play')} ${started ? 'Continue reading' : 'Start reading'}</button>
+          ${!['cbz', 'cbr'].includes(book.format) ? `<button class="btn btn-primary" data-hero-audio>${icon('download')} Download MP3</button>` : ''}
           ${narration ? `<button class="btn" data-hero-listen>${icon('loudhailer')} Listen</button>` : ''}
+          <button class="btn btn-quiet" data-hero-open>${icon('book')} ${started ? 'Continue reading' : 'Read'}</button>
         </div>
       </div>
       <div class="hero-meta">
@@ -164,16 +165,16 @@ function cardMarkup(app, book, i) {
 function addTileMarkup() {
   return `
     <article class="book-card add-tile">
-      <button class="book-cover" data-add aria-label="Add a book">
+      <button class="book-cover" data-add aria-label="Add files to make an audiobook">
         <span class="add-tile-inner">
           <span class="plus-ring">${icon('plus')}</span>
-          <strong>Add a book</strong>
+          <strong>Add files</strong>
           <small>EPUB · PDF · DOCX<br>HTML · RTF · ODT · FB2</small>
         </span>
       </button>
       <div class="book-info">
-        <div class="book-title" style="color:var(--ink-3);font-weight:500">Your own files</div>
-        <div class="book-author">Everything stays on this device</div>
+        <div class="book-title" style="color:var(--ink-3);font-weight:500">Make an audiobook</div>
+        <div class="book-author">Upload files · export one MP3</div>
       </div>
     </article>`;
 }
@@ -182,15 +183,15 @@ function emptyStateMarkup() {
   return `
     <section class="empty-hero">
       <div class="empty-copy">
-        <div class="eyebrow">A quiet place to read</div>
-        <p>Drop in an EPUB, PDF, Word document, ODT, RTF, HTML, FB2, comic archive or plain text file. Settle into a typeface you love — or let a natural voice read it aloud while you listen.</p>
+        <div class="eyebrow">Private audiobook studio</div>
+        <p>Turn your own EPUB, PDF, Word, ODT, RTF, HTML, FB2, Markdown or text files into a single MP3 audiobook. Fast voices run on this device; your book never gets uploaded. You can still read and listen here, too.</p>
         <div class="empty-actions">
-          <button class="btn btn-primary" data-add>${icon('plus')} Add your first book</button>
+          <button class="btn btn-primary" data-add>${icon('download')} Add files to make an MP3</button>
           <button class="btn" data-free-books>${icon('book')} Free books</button>
-          <button class="btn" data-demo-shortcuts>${icon('keyboard')} Shortcuts</button>
+          <button class="btn btn-quiet" data-demo-shortcuts>${icon('keyboard')} Shortcuts</button>
         </div>
         <div class="empty-formats">
-          ${['EPUB', 'PDF', 'DOCX', 'TXT', 'CBZ', 'CBR'].map(f => `<span class="format-pill">${icon('file')}${f}</span>`).join('')}
+          ${['EPUB', 'PDF', 'DOCX', 'ODT', 'RTF', 'HTML', 'FB2', 'TXT', 'MD'].map(f => `<span class="format-pill">${icon('file')}${f}</span>`).join('')}
         </div>
       </div>
       <div class="empty-art" aria-hidden="true">
@@ -199,17 +200,17 @@ function emptyStateMarkup() {
         <div class="art-book">
           <div class="art-kicker">Alya’s Reader</div>
           <div>
-            <div class="art-title">Your next<br>book.</div>
-            <div class="art-author">Ready when you are</div>
+            <div class="art-title">Your next<br>audiobook.</div>
+            <div class="art-author">Made on this device</div>
           </div>
         </div>
         <div class="art-wave"><i></i><i></i><i></i><i></i><i></i><i></i></div>
       </div>
     </section>
     <div class="feature-strip">
-      <div class="feature"><div class="fi">${icon('loudhailer')}</div><div><strong>Natural narration</strong><p>Free Piper neural voices read with you — offline, with American, British, Scottish and Australian accents.</p></div></div>
-      <div class="feature"><div class="fi">${icon('shield')}</div><div><strong>Everything stays local</strong><p>Your files, progress, bookmarks and notes live in this browser. Nothing is uploaded.</p></div></div>
-      <div class="feature"><div class="fi">${icon('type')}</div><div><strong>Made for long reads</strong><p>Thirteen typefaces, a dyslexia-friendly mode, four themes, and comfortable control over size and spacing.</p></div></div>
+      <div class="feature"><div class="fi">${icon('download')}</div><div><strong>One whole-book MP3</strong><p>Download a single audiobook file, or make a chapter ZIP with a playlist.</p></div></div>
+      <div class="feature"><div class="fi">${icon('headphones')}</div><div><strong>Fast local voices</strong><p>26 low-latency Piper voices create audio offline. Progress survives a reload.</p></div></div>
+      <div class="feature"><div class="fi">${icon('shield')}</div><div><strong>Your files stay private</strong><p>Books and audio exports stay in this browser. Nothing is uploaded.</p></div></div>
     </div>`;
 }
 
@@ -240,6 +241,11 @@ function onLibraryClick(app, e) {
   }
   if (e.target.closest('[data-demo-shortcuts]')) {
     app.showShortcuts?.();
+    return;
+  }
+  if (e.target.closest('[data-hero-audio]')) {
+    const recent = pickRecent(app);
+    if (recent) downloadBookAudio(recent.book);
     return;
   }
   if (e.target.closest('[data-hero-open]') || e.target.closest('[data-hero-listen]')) {
@@ -279,7 +285,7 @@ function openCardMenu(app, book, anchor) {
     { label: 'Book details', icon: 'info', onSelect: () => openBookDetails(app, book) },
     { label: 'Collections…', icon: 'folder', onSelect: () => openCollections(app, book) },
     ...(!['cbz', 'cbr'].includes(book.format) ? [{ label: 'Make audiobook chapters…', icon: 'loudhailer', onSelect: () => app.openBook(book.id, { audiobook: true }) }] : []),
-    { label: 'Download audio', icon: 'download', onSelect: () => downloadBookAudio(book) },
+    ...(!['cbz', 'cbr'].includes(book.format) ? [{ label: 'Download audio', icon: 'download', onSelect: () => downloadBookAudio(book) }] : []),
     { sep: true },
     {
       label: 'Remove from library', icon: 'trash', danger: true, onSelect: async () => {

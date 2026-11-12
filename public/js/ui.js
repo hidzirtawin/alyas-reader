@@ -273,7 +273,7 @@ export function shortcutsModal() {
     ['Reading appearance', ['A']],
     ['Jump to a page or chapter', ['G']],
     ['Close panels / reader', ['Esc']],
-    ['Add a book (library)', ['⌘', 'O']],
+    ['Add files (library)', ['⌘', 'O']],
     ['Search library', ['/']],
   ];
   modal({

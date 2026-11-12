@@ -1,7 +1,7 @@
 {
   "name": "Alya’s Reader",
   "short_name": "Alya’s Reader",
-  "description": "A calm, local-first ebook and comic reader with natural narration.",
+  "description": "A private audiobook studio and book reader. Turn your own files into MP3s with fast local voices.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

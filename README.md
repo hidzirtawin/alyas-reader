@@ -1,6 +1,6 @@
 # Alya’s Reader
 
-A calm, local-first ebook and comic reader for your own files. Upload **EPUB, PDF, DOCX, ODT, RTF, HTML, FB2, TXT, Markdown, CBZ or CBR**, read in the typography you like, and listen with a natural voice — or turn narration off and read in silence.
+A local audiobook studio and reader for your own files. Upload **EPUB, PDF, DOCX, ODT, RTF, HTML, FB2, TXT or Markdown** and turn them into a single MP3 or a chapter ZIP using fast voices on this device. You can also read your books here. Comic files remain readable, but image-only comics cannot become audiobooks.
 
 Your books stay in your browser. No accounts, no cloud library, no uploads. Voice models download once from the open Piper catalog.
 
@@ -19,16 +19,16 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 
 ## What it does
 
-- **Your library** — drag & drop or pick multiple files. Files are stored in IndexedDB in this browser, along with reading positions, bookmarks and highlights.
+- **Your audio library** — drag & drop or pick multiple book/document files, then use **Download audio** for a whole-book MP3. Source files, exports, reading positions, bookmarks and highlights stay in this browser.
 - **EPUB** — custom renderer with chapter spine, table of contents, internal links, images, per-chapter progress and word counts. DRM-protected EPUBs are not supported.
 - **PDF** — full PDF.js viewer with lazy page rendering, selectable text, zoom, outline navigation and page jump. Bookmarks and narration work per page.
 - **DOCX** — imported with Mammoth, including headings, lists, tables, emphasis and embedded images. Word documents are split into chapters at heading boundaries.
 - **HTML / ODT / RTF / FB2** — HTML is sanitised and flattened into readable chapters, ODT reads the OpenDocument text, RTF is converted to clean paragraphs, and FB2 fiction books keep their sections and titles.
 - **TXT / Markdown** — plain-text chapter detection, plus a safe Markdown renderer for headings, lists, quotes, code, links and emphasis.
-- **Comics (CBZ / CBR)** — page-by-page viewer with natural page ordering, ComicInfo.xml metadata, first-page covers, a page-number grid, jump-to-page, zoom and swipe/keyboard page turns. CBR support uses a bundled WASM build of libarchive (RAR v4 and v5).
+- **Comics (CBZ / CBR)** — page-by-page reader with natural page ordering, ComicInfo.xml metadata, first-page covers, a page-number grid, jump-to-page, zoom and swipe/keyboard page turns. Image-only pages can’t be rendered as speech. CBR support uses a bundled WASM build of libarchive (RAR v4 and v5).
 - **Fast narration** — 26 free, low-latency **Piper** neural voices across 13 languages, including American and British English. Runs locally in the browser; the default Amy voice downloads once in the background.
 - **Silent reading** — switch narration off entirely in Settings or the voice picker. The reader becomes text-only and the Listen controls disappear.
-- **Listen along** — sentence-by-sentence playback with current-word highlighting, auto-scroll, previous/next sentence, fine-grained speed control, and a whole-book seek bar with estimated elapsed/total time. The next sentences are generated and decoded ahead, so playback stays gapless across sentences and chapters. The voice engine warms in the background and the opening sentences are pre-generated when a book opens, so the first tap often starts instantly.
+- **Listen along** — sentence-by-sentence playback with current-word highlighting, auto-scroll, previous/next sentence, fine-grained speed control, and a whole-book seek bar with estimated elapsed/total time. The voice engine warms in the background and opening sentences are pre-generated to reduce startup delay and gaps. Fast voices are recommended on phones.
 - **Make audiobook chapters** — choose a whole book or one chapter/page, then create a zip of **MP3 chapter files** with an `m3u` playlist and metadata. Preview a fast Piper voice before exporting. For a one-click single-file export, use **Download audio** from the library card menu, book details or reader menu. That full-book MP3 is saved on-device as chapters are encoded, resumes after a reload and downloads from disk rather than memory. No Audible account, DRM or cloud service is involved. Comic pages are images, so narration is unavailable there.
 - **Languages** — books are detected automatically (script and stop-word analysis, plus EPUB/ODT/FB2 metadata). Non-English books use a matching Piper voice when one is available, and hyphenation follows the book’s language.
 - **Dictionary** — select a word and tap **Define**, or double-click it. A public-domain Webster’s 1913 dictionary is stored offline; other languages also get a Wiktionary link.

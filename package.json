@@ -2,7 +2,7 @@
   "name": "alyas-reader",
   "version": "1.0.0",
   "private": true,
-  "description": "Alya's Reader — a calm, local-first ebook and comic reader for EPUB, PDF, Word, CBZ and CBR files, with natural narration.",
+  "description": "Alya's Reader — a local-first audiobook studio that turns your EPUB, PDF, Word and text files into MP3s with fast Piper voices.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -20,6 +20,9 @@
     "cbr",
     "docx",
     "tts",
+    "audiobook",
+    "mp3",
+    "audio-export",
     "reader",
     "piper"
   ],

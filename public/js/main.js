@@ -65,7 +65,7 @@ const app = {
     }
     app.view = view;
     const meta = {
-      library: ['Alya’s Reader', 'Everything you’re reading, in one quiet place.'],
+      library: ['Your audiobooks', 'Turn your own books and documents into MP3s—locally.'],
       bookmarks: ['Marks & notes', 'Bookmarks, highlights and thoughts — kept locally.'],
       settings: ['Settings', 'Make Alya’s Reader yours.'],
     }[view];

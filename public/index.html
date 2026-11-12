@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Alya’s Reader — your reading room</title>
-<meta name="description" content="A calm, local-first ebook and comic reader with natural narration. Upload EPUB, PDF, Word, ODT, RTF, HTML, FB2, comics or text files.">
+<title>Alya’s Reader — private audiobook studio</title>
+<meta name="description" content="Turn your own EPUB, PDF, Word, ODT, RTF, HTML, FB2 or text files into local MP3 audiobooks with fast Piper voices.">
 <meta name="theme-color" content="#1b1814">
 <meta name="app-build" content="20261108-3">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -87,12 +87,12 @@
           <path d="M45.6 33.6c1.3 1 3 1 4.3 0" fill="none" stroke="#21301c" stroke-width="1.2" stroke-linecap="round"/>
         </svg>
       </span>
-      <span class="brand-text">Alya’s Reader<em>read · listen</em></span>
+      <span class="brand-text">Alya’s Reader<em>private audiobook studio</em></span>
     </div>
 
     <nav class="rail-nav" aria-label="Main">
       <button class="rail-link is-active" data-view="library">
-        <svg><use href="#i-book"/></svg><span>Alya’s Reader</span><span class="rail-count" id="railBookCount"></span>
+        <svg><use href="#i-book"/></svg><span>Books &amp; audio</span><span class="rail-count" id="railBookCount"></span>
       </button>
       <button class="rail-link" data-view="bookmarks">
         <svg><use href="#i-bookmark"/></svg><span>Marks &amp; notes</span><span class="rail-count" id="railMarkCount"></span>
@@ -114,7 +114,7 @@
         <p class="storage-note"><svg><use href="#i-shield"/></svg> Your files never leave this device.</p>
       </div>
       <button class="rail-add" id="railAdd">
-        <svg><use href="#i-plus"/></svg> Add a book
+        <svg><use href="#i-plus"/></svg> Add files
       </button>
     </div>
   </aside>
@@ -124,7 +124,7 @@
       <button class="icon-btn nav-toggle" id="navToggle" aria-label="Open navigation"><svg><use href="#i-menu"/></svg></button>
       <div class="topbar-title">
         <h1 id="viewTitle">Alya’s Reader</h1>
-        <p id="viewSubtitle">Everything you're reading, in one quiet place.</p>
+        <p id="viewSubtitle">Turn your own books and documents into MP3 audiobooks.</p>
       </div>
       <div class="topbar-actions">
         <label class="search" id="searchWrap">
@@ -132,7 +132,7 @@
           <input id="librarySearch" type="search" placeholder="Search library" autocomplete="off" spellcheck="false" aria-label="Search library">
         </label>
         <button class="btn btn-quiet" id="freeBooksBtn" title="Find free books"><svg><use href="#i-book"/></svg><span>Free books</span></button>
-        <button class="btn btn-primary" id="addBookBtn"><svg><use href="#i-plus"/></svg><span>Add book</span></button>
+        <button class="btn btn-primary" id="addBookBtn"><svg><use href="#i-plus"/></svg><span>Add files</span></button>
       </div>
     </header>
 
@@ -143,7 +143,7 @@
 <div class="drop-veil" id="dropVeil" aria-hidden="true">
   <div class="drop-card">
     <div class="drop-icon"><svg><use href="#i-upload"/></svg></div>
-    <h2>Drop your book here</h2>
+    <h2>Drop files to make audiobooks</h2>
     <p>EPUB, PDF, Word, ODT, RTF, HTML, FB2, TXT or Markdown</p>
   </div>
 </div>

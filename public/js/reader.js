@@ -3181,7 +3181,7 @@ function openMoreMenu(state) {
       icon: 'moon',
       onSelect: () => openSleepDialog(state),
     },
-    { label: 'Download audio', icon: 'download', onSelect: () => downloadBookAudio(state.record) },
+    ...(state.mode !== 'comic' ? [{ label: 'Download audio', icon: 'download', onSelect: () => downloadBookAudio(state.record) }] : []),
     { label: 'Keyboard shortcuts', icon: 'keyboard', onSelect: () => shortcutsModal() },
     { sep: true },
     {

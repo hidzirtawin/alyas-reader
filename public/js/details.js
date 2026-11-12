@@ -11,6 +11,7 @@ export function openBookDetails(app, book, { fromReader = false } = {}) {
   const progress = app.progress?.get(book.id);
   const percent = progress?.percent || 0;
   const narration = getPrefs().tts.enabled && !['cbz', 'cbr'].includes(book.format);
+  const canExportAudio = !['cbz', 'cbr'].includes(book.format);
   const numPages = book.meta?.numPages || book.meta?.pageCount;
   const chapters = book.meta?.chapterCount;
   const lengthLabel = numPages
@@ -48,7 +49,7 @@ export function openBookDetails(app, book, { fromReader = false } = {}) {
   foot.innerHTML = `
     <button class="btn btn-danger btn-sm" data-remove>Remove</button>
     <span style="flex:1"></span>
-    <button class="btn btn-sm" data-download>Download audio</button>
+    ${canExportAudio ? '<button class="btn btn-sm" data-download>Download audio</button>' : ''}
     ${narration ? '<button class="btn btn-sm" data-listen>Listen</button>' : ''}
     <button class="btn btn-primary btn-sm" data-read>${percent > 0 ? 'Continue' : 'Read'}</button>`;
 
@@ -67,7 +68,7 @@ export function openBookDetails(app, book, { fromReader = false } = {}) {
 
   foot.querySelector('[data-read]').onclick = () => openBook(false);
   foot.querySelector('[data-listen]')?.addEventListener('click', () => openBook(true));
-  foot.querySelector('[data-download]').onclick = () => downloadBookAudio(book);
+  foot.querySelector('[data-download]')?.addEventListener('click', () => downloadBookAudio(book));
   foot.querySelector('[data-remove]').onclick = async () => {
     const ok = await confirmDialog({
       title: 'Remove this book?',

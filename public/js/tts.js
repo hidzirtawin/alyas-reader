@@ -1574,9 +1574,14 @@ export class SpeechEngine {
   }
 
   /* Generate upcoming text without changing the current sentence. */
+  _lookahead() {
+    const voice = piperVoiceById(getPrefs().tts.piperVoice);
+    return voice?.quality === 'low' ? 5 : 3;
+  }
+
   prefetchTexts(texts = []) {
     if (this.provider !== 'piper') return;
-    for (const text of texts.slice(0, 3)) {
+    for (const text of texts.slice(0, this._lookahead())) {
       const clean = cleanForSpeech(text);
       if (!clean) continue;
       const chunk = splitLongText(clean, 800)[0];
@@ -1641,7 +1646,7 @@ export class SpeechEngine {
   }
 
   _trimDecoded() {
-    while (this._decoded.size > 4) {
+    while (this._decoded.size > 5) {
       const oldest = this._decoded.keys().next().value;
       this._decoded.delete(oldest);
     }
@@ -1650,8 +1655,10 @@ export class SpeechEngine {
   _prefetch(sentenceIndex) {
     if (this.provider !== 'piper') return;
     // Generate several sentences ahead so playback does not wait between
-    // sentences. These jobs yield to the sentence being spoken.
-    for (let d = 1; d <= 3; d++) {
+    // sentences. Fast voices get a deeper buffer. These jobs yield to the
+    // sentence being spoken.
+    const lookahead = this._lookahead();
+    for (let d = 1; d <= lookahead; d++) {
       const next = this.sentences[sentenceIndex + d];
       if (!next) break;
       const text = cleanForSpeech(next.text);

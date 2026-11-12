@@ -1610,7 +1610,9 @@ async function prefetchOpeningAudio(state) {
     if (state.resumePoint && state.resumePoint.chapterIndex === state.chapterIndex) {
       start = Math.max(0, state.resumePoint.sentenceIndex || 0);
     }
-    const texts = sentences.slice(start, start + 3).map(sentence => sentence.text);
+    const voice = piperVoiceById(getPrefs().tts.piperVoice);
+    const count = voice?.quality === 'low' ? 5 : 3;
+    const texts = sentences.slice(start, start + count).map(sentence => sentence.text);
     if (!texts.length) return;
     state.engine?.prefetchTexts(texts);
   } catch {}

@@ -58,6 +58,7 @@ Alya’s Reader runs [Piper](https://github.com/rhasspy/piper) (MIT) entirely in
 - **179 voices** across 30+ languages
 - American, British, Scottish, Northern English, Southern English and **Australian** accents
 - Multi-speaker models with a searchable, expandable speaker browser
+- **Fast voices** — a dedicated low-latency section (Amy, Ryan, Alan) synthesizes quicker on phones, with a deeper look-ahead buffer for smoother playback
 - Adjustable 0.5×–2× speed and a **pause-between-sentences** control for natural reading rhythm
 - A live **download progress bar** (percent and megabytes) in the voice picker and the reading dock
 - The full **LibriVox (LibriTTS)** catalog exposes all **2,306 speakers** in a searchable list — browse 60 at a time or search by name/number

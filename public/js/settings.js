@@ -651,6 +651,14 @@ export async function openVoiceModal({ onSaved } = {}) {
     const previewBtn = tabBody.querySelector('[data-preview]');
     previewBtn?.addEventListener('click', () => testVoice(previewBtn));
     if (tab === 'piper') renderPiperList();
+    tabBody.querySelectorAll('[data-fast]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        draft.piperVoice = btn.dataset.fast;
+        draft.piperSpeaker = 0;
+        renderTabs();
+        updatePiperNote();
+      });
+    });
     const importBtn = tabBody.querySelector('#importVoice');
     const importInput = tabBody.querySelector('#importVoiceFile');
     importBtn?.addEventListener('click', () => importInput?.click());
@@ -692,7 +700,22 @@ export async function openVoiceModal({ onSaved } = {}) {
     const all = getPiperVoices();
     const selected = piperVoiceById(draft.piperVoice);
     const languages = [...new Set(all.map(v => v.language).filter(Boolean))].sort((a, b) => (a === 'English' ? -1 : b === 'English' ? 1 : a.localeCompare(b)));
+    const fastVoices = [
+      { id: 'en_US-amy-low', name: 'Amy', tag: 'US · fast' },
+      { id: 'en_US-ryan-low', name: 'Ryan', tag: 'US · fast' },
+      { id: 'en_GB-alan-low', name: 'Alan', tag: 'UK · fast' },
+    ];
     return `
+      <div class="presets">
+        <div class="presets-head"><span>Fast voices</span><span class="dim">synthesize quicker on phones</span></div>
+        <div class="preset-grid">
+          ${fastVoices.map(p => `<button class="preset${p.id === draft.piperVoice ? ' is-active' : ''}" data-fast="${esc(p.id)}">
+            <span class="preset-name">${esc(p.name)}<em>${esc(p.tag)}</em></span>
+            <span class="preset-desc">Low-latency single-speaker voice.</span>
+          </button>`).join('')}
+        </div>
+        <p class="preset-note">These lower-quality models generate faster and often stay ahead of playback on slower phones. Pick a regional voice below for the best quality.</p>
+      </div>
       <div class="presets">
         <div class="presets-head"><span>Regional accents</span><span class="dim">${PIPER_PRESETS.length} voices · VCTK · L2-ARCTIC · AU</span></div>
         <div class="preset-grid">
@@ -763,7 +786,7 @@ export async function openVoiceModal({ onSaved } = {}) {
         <span class="playing-dot"></span>
         <span class="vname">${esc(v.name)}</span>
         <span class="vlang">${esc(v.country || v.accent)}${v.num_speakers > 1 ? ` · ${v.num_speakers} speakers` : ''}</span>
-        ${v.custom ? '<span class="vtag">Custom</span>' : v.community ? '<span class="vtag">Community</span>' : (v.quality ? `<span class="vtag">${esc(v.quality)}</span>` : '')}
+        ${v.custom ? '<span class="vtag">Custom</span>' : v.community ? '<span class="vtag">Community</span>' : (v.quality ? `<span class="vtag">${v.quality === 'low' ? 'Fast' : esc(v.quality)}</span>` : '')}
       </button>`).join('')}
     `).join('');
     renderPiperSpeaker();

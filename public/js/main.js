@@ -2,7 +2,7 @@
 
 import { db } from './db.js';
 import { applyPrefs, getPrefs } from './prefs.js';
-import { renderLibrary, importFiles, refreshImportQueue } from './library.js';
+import { renderLibrary, importFiles, refreshImportQueue } from './library.js?v=voicegenerator1';
 import { renderMarks } from './bookmarks.js';
 import { renderSettings } from './settings.js?v=fastvoices1';
 import { openReader, closeReader, restoreReadingSession } from './reader.js';

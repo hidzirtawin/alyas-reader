@@ -61,7 +61,7 @@ export function renderLibrary(app) {
       <h2>${query ? 'Search results' : (activeCollection || 'All books')}</h2>
       <span class="count">${filtered.length}${query ? ` of ${inCollection.length}` : ''}</span>
       <span class="spacer"></span>
-      <button class="btn btn-sm" data-voice-generator>${icon('headphones')} Voice-Generator</button>
+      <button class="btn btn-sm" data-voice-generator>${icon('sparkles')} Voice-Generator</button>
       ${query ? '' : `<label class="sort-wrap">
         <select id="librarySort" aria-label="Sort library">
           <option value="recent"${prefs.librarySort === 'recent' ? ' selected' : ''}>Recently read</option>
@@ -188,7 +188,7 @@ function emptyStateMarkup() {
         <p>Turn your own EPUB, PDF, Word, ODT, RTF, HTML, FB2, Markdown or text files into a single MP3 audiobook. Fast voices run on this device by default. You can also open Voice-Generator here as an optional outside tool.</p>
         <div class="empty-actions">
           <button class="btn btn-primary" data-add>${icon('download')} Add files to make an MP3</button>
-          <button class="btn" data-voice-generator>${icon('headphones')} Use Voice-Generator</button>
+          <button class="btn" data-voice-generator>${icon('sparkles')} Use Voice-Generator</button>
           <button class="btn" data-free-books>${icon('book')} Free books</button>
           <button class="btn btn-quiet" data-demo-shortcuts>${icon('keyboard')} Shortcuts</button>
         </div>
@@ -211,7 +211,7 @@ function emptyStateMarkup() {
     </section>
     <div class="feature-strip">
       <div class="feature"><div class="fi">${icon('download')}</div><div><strong>One whole-book MP3</strong><p>Download a single audiobook file, or make a chapter ZIP with a playlist.</p></div></div>
-      <div class="feature"><div class="fi">${icon('headphones')}</div><div><strong>Fast local voices</strong><p>26 low-latency Piper voices create audio offline. Progress survives a reload.</p></div></div>
+      <div class="feature"><div class="fi">${icon('volume')}</div><div><strong>Fast local voices</strong><p>26 low-latency Piper voices create audio offline. Progress survives a reload.</p></div></div>
       <div class="feature"><div class="fi">${icon('shield')}</div><div><strong>Private by default</strong><p>Local Piper stays on-device; Voice-Generator is optional and clearly labeled.</p></div></div>
     </div>`;
 }
@@ -280,7 +280,7 @@ function openVoiceGenerator() {
       <p><strong>Privacy:</strong> Voice-Generator extracts EPUB text in your browser, then sends text chunks to its hosted text-to-speech service. Its PDF converter uploads the PDF to a service for text extraction. This is a third-party service, not your device.</p>
       <p>For a very long book, the resulting audiobook can take a while and may be a large download.</p>
     </div>`,
-    foot: `<button class="btn" data-vg-cancel>Cancel</button><button class="btn btn-primary" data-vg-continue>${icon('headphones')} Continue to Voice-Generator</button>`,
+    foot: `<button class="btn" data-vg-cancel>Cancel</button><button class="btn btn-primary" data-vg-continue>${icon('sparkles')} Continue to Voice-Generator</button>`,
     wide: true,
   });
   consent.footEl.querySelector('[data-vg-cancel]')?.addEventListener('click', () => consent.close('cancel'));

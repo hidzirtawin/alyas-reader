@@ -608,7 +608,7 @@ export async function openVoiceModal({ onSaved } = {}) {
   body.innerHTML = `
     <div class="provider-tabs" role="tablist" aria-label="Narration mode">
       <button class="provider-tab" data-tab="silent" role="tab">${icon('eye-off')} Silent</button>
-      <button class="provider-tab" data-tab="piper" role="tab">${icon('headphones')} Fast Piper <span class="tag">Free</span></button>
+      <button class="provider-tab" data-tab="piper" role="tab">${icon('waveform')} Fast Piper <span class="tag">Free</span></button>
     </div>
     <div id="voiceTabBody"></div>
     <div class="divider" style="margin:18px 0 14px"></div>

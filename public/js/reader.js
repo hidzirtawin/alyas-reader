@@ -8,17 +8,17 @@ import {
 import { buildReflowable, buildComicBook, isComicFormat } from './renderers.js';
 import { PdfView } from './pdfview.js';
 import { ComicView } from './comicview.js';
-import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName, getPiperVoices, previewSpeech, stopPreview, warmPiperEngine, audioContext } from './tts.js';
+import { SpeechEngine, describeVoice, onPiperProgress, piperProgressLabel, piperVoiceById, piperVoiceForLanguage, piperSpeakerName, getPiperVoices, previewSpeech, stopPreview, warmPiperEngine, audioContext } from './tts.js?v=voicewarm1';
 import {
   toast, modal, confirmDialog, contextMenu, closeAllModals, shortcutsModal,
   formatLabel, isModalOpen,
 } from './ui.js';
 import { openBookDetails } from './details.js';
-import { downloadBookAudio } from './audioexport.js';
+import { downloadBookAudio } from './audioexport.js?v=voicewarm1';
 import { openVoiceModal } from './settings.js?v=fastvoices1';
 import { openDictionary } from './dictionary.js';
 import { getSleepTimer, startSleepTimer, cancelSleepTimer, formatSleepRemaining } from './sleep.js';
-import { createAudiobook, audiobookChapters } from './audiobook.js';
+import { createAudiobook, audiobookChapters } from './audiobook.js?v=voicewarm1';
 import { baseLanguage, languageName, languageMatches } from './language.js';
 import {
   $, esc, icon, clamp, debounce, uid, normalizedText,
@@ -416,7 +416,7 @@ function wireEvents(state) {
     const eng = state.engine;
     if (!eng || eng.provider !== 'piper' || !refs.ttsPercent) return;
     if (eng.state !== 'loading') { refs.ttsPercent.hidden = true; return; }
-    const active = p.phase === 'downloading' || p.phase === 'preparing' || p.phase === 'generating';
+    const active = p.phase === 'downloading' || p.phase === 'checking' || p.phase === 'preparing' || p.phase === 'generating';
     refs.ttsPercent.hidden = !active;
     if (!active) return;
     refs.ttsPercent.textContent = p.phase === 'downloading' ? `${p.percent}%` : '…';
@@ -1907,7 +1907,7 @@ function updateTTSState(state, st) {
     const e = state.engine;
     refs.ttsPos.textContent = e?.total && (e.index || 0) > 0
       ? `Preparing ${Math.min(e.index + 1, e.total)} / ${e.total}…`
-      : 'Preparing voice…';
+      : 'Loading voice…';
   } else if (st === 'playing' && state.engine?.total) {
     refs.ttsPos.textContent = `${Math.min((state.engine.index || 0) + 1, state.engine.total)} / ${state.engine.total}`;
   }
@@ -2992,7 +2992,7 @@ function openAudiobookDialog(state) {
     testBtn.innerHTML = '<span class="busy-dot"></span> Preparing…';
     const stopProgress = onPiperProgress(p => {
       if (p.phase === 'downloading') testBtn.innerHTML = `<span class="busy-dot"></span> Downloading ${p.percent || 0}%…`;
-      else if (p.phase === 'preparing') testBtn.innerHTML = '<span class="busy-dot"></span> Preparing…';
+      else if (p.phase === 'preparing' || p.phase === 'checking') testBtn.innerHTML = `<span class="busy-dot"></span> ${piperProgressLabel(p)}`;
     });
     try {
       await previewSpeech({

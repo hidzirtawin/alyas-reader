@@ -6,8 +6,8 @@
 import { db } from './db.js';
 import { getPrefs } from './prefs.js';
 import { buildReflowable } from './renderers.js';
-import { prepareAudiobook, renderSentenceWav, Mp3StreamEncoder, safeName, createAudiobook } from './audiobook.js';
-import { piperVoiceById, piperSpeakerName, onPiperProgress, piperProgressLabel } from './tts.js';
+import { prepareAudiobook, renderSentenceWav, Mp3StreamEncoder, safeName, createAudiobook } from './audiobook.js?v=voicewarm1';
+import { piperVoiceById, piperSpeakerName, onPiperProgress, piperProgressLabel } from './tts.js?v=voicewarm1';
 import { modal, confirmDialog, toast } from './ui.js';
 import {
   downloadBlob, formatBytes, countWords, detectSentenceSegments, splitLongText,
@@ -368,7 +368,7 @@ async function runWithModal(job, chapters, { progress = null, token = { cancelle
   const status = progress.bodyEl.querySelector('#bookAudioStatus');
   let generationStarted = false;
   const stopProgress = onPiperProgress(p => {
-    if (!generationStarted && status && (p.phase === 'downloading' || p.phase === 'preparing')) {
+    if (!generationStarted && status && (p.phase === 'downloading' || p.phase === 'checking' || p.phase === 'preparing')) {
       status.textContent = piperProgressLabel(p);
     }
   });

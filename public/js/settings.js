@@ -3,7 +3,7 @@
 const BUILD = document.querySelector('meta[name="app-build"]')?.content || '1.0';
 
 import { db } from './db.js';
-import { clearAudioExports } from './audioexport.js';
+import { clearAudioExports } from './audioexport.js?v=voicewarm1';
 import {
   getPrefs, savePrefs, setReaderPrefs, FONTS, THEMES, DEFAULT_READER, DYSLEXIA_READER,
 } from './prefs.js';
@@ -13,7 +13,7 @@ import {
   onPiperProgress, piperProgressLabel,
   listCachedVoices, deleteCachedVoice, clearCachedVoices,
   importCustomVoice, removeCustomVoice,
-} from './tts.js';
+} from './tts.js?v=voicewarm1';
 import {
   modal, toast, confirmDialog,
 } from './ui.js';
@@ -325,7 +325,7 @@ function onSettingsClick(app, e) {
     btn.innerHTML = `<span class="busy-dot"></span> Playing…`;
     window.lumen?.pauseTTS?.();
     const stopProgress = onPiperProgress(p => {
-      if (['downloading', 'preparing', 'generating'].includes(p.phase)) {
+      if (['downloading', 'checking', 'preparing', 'generating'].includes(p.phase)) {
         btn.innerHTML = `<span class="busy-dot"></span> ${piperProgressLabel(p)}`;
       }
     });
@@ -880,20 +880,20 @@ export async function openVoiceModal({ onSaved } = {}) {
     if (probe.provider === 'piper') probe.piperSpeaker = draft.piperSpeaker || 0;
     btn.disabled = true;
     const old = btn.innerHTML;
-    btn.innerHTML = tab === 'piper' ? '<span class="busy-dot"></span> Preparing voice…' : '<span class="busy-dot"></span> Generating voice…';
+    btn.innerHTML = tab === 'piper' ? '<span class="busy-dot"></span> Loading voice…' : '<span class="busy-dot"></span> Generating voice…';
     const progress = tabBody.querySelector('#voiceProgress');
     const pctOut = tabBody.querySelector('#voiceProgressPct');
     const label = tabBody.querySelector('#voiceProgressText');
     const stopProgress = onPiperProgress(p => {
       if (probe.provider !== 'piper' || p.voiceId !== probe.piperVoice) return;
-      const active = p.phase === 'downloading' || p.phase === 'preparing' || p.phase === 'generating';
+      const active = p.phase === 'downloading' || p.phase === 'checking' || p.phase === 'preparing' || p.phase === 'generating';
       if (progress) progress.hidden = !active;
       if (!active) return;
       const pct = p.phase === 'downloading' ? p.percent : 100;
       if (pctOut) pctOut.textContent = `${pct}%`;
       const text = p.phase === 'downloading'
         ? `${Math.round((p.loaded || 0) / 1048576)} / ${Math.round((p.total || 0) / 1048576)} MB`
-        : (p.phase === 'preparing' ? 'Preparing voice…' : 'Generating speech…');
+        : (p.phase === 'generating' ? 'Generating speech…' : piperProgressLabel(p));
       if (label) label.textContent = text;
       btn.innerHTML = `<span class="busy-dot"></span> ${text}`;
     });

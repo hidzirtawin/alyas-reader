@@ -9,8 +9,8 @@ import { openReader, closeReader, restoreReadingSession } from './reader.js';
 import { shortcutsModal, toast } from './ui.js';
 import { openBookSources } from './sources.js';
 import { startSleepTimer, cancelSleepTimer, getSleepTimer, formatSleepRemaining } from './sleep.js';
-import { loadPiperCatalog, preloadPiperVoice, warmPiperEngine, onPiperProgress, piperProgressLabel } from './tts.js';
-import { resumeAudioExports } from './audioexport.js';
+import { loadPiperCatalog, warmPiperEngine, onPiperProgress, piperProgressLabel } from './tts.js?v=voicewarm1';
+import { resumeAudioExports } from './audioexport.js?v=voicewarm1';
 import { $, $$, clamp, formatBytes, debounce, icon } from './util.js';
 
 const app = {
@@ -264,7 +264,7 @@ window.addEventListener('focus', checkForUpdateSoon);
 let voicePill = null;
 
 function renderVoicePill(p) {
-  const active = p.phase === 'downloading' || p.phase === 'preparing';
+  const active = p.phase === 'downloading' || p.phase === 'checking' || p.phase === 'preparing';
   if (!active || document.querySelector('#reader.is-open') || document.querySelector('.modal-backdrop')) {
     voicePill?.remove();
     voicePill = null;
@@ -282,20 +282,15 @@ function renderVoicePill(p) {
 
 function warmDefaultVoice() {
   const tts = getPrefs().tts;
-  if (!tts.enabled || tts.provider !== 'piper' || navigator.onLine === false) return;
+  if (!tts.enabled || tts.provider !== 'piper') return;
   onPiperProgress(renderVoicePill);
   setTimeout(() => {
-    preloadPiperVoice(tts.piperVoice).then(result => {
-      if (result === 'missing') return;
-      voicePill?.remove();
-      voicePill = null;
-      setTimeout(() => { warmPiperEngine(tts.piperVoice).catch(() => {}); }, 1200);
-    }).catch(err => {
+    warmPiperEngine(tts.piperVoice).catch(err => {
       console.warn('Default voice download deferred', err);
       voicePill?.remove();
       voicePill = null;
     });
-  }, 1600);
+  }, 500);
 }
 
 /* ── Sleep timer ─────────────────────────────────────────────────── */

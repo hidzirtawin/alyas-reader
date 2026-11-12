@@ -267,13 +267,14 @@ function emitPiperProgress(patch = {}) {
 }
 
 export function piperProgressLabel(p = piperProgress) {
+  if (p.phase === 'checking') return 'Checking voice model…';
   if (p.phase === 'downloading') {
     const pct = p.total ? Math.min(99, Math.round((p.loaded / p.total) * 100)) : 0;
     if (!pct) return 'Downloading voice…';
     const mb = n => `${Math.round(n / 1048576)} MB`;
     return p.total ? `Downloading voice · ${pct}% (${mb(p.loaded)} / ${mb(p.total)})` : `Downloading voice · ${pct}%`;
   }
-  if (p.phase === 'preparing') return 'Preparing voice…';
+  if (p.phase === 'preparing') return p.detail || 'Loading Piper on this device…';
   if (p.phase === 'generating') return 'Generating speech…';
   if (p.phase === 'ready') return 'Voice ready';
   return '';
@@ -454,7 +455,21 @@ async function fetchModelWithProgress(url, expectedBytes, onProgress) {
   return new Blob(chunks, { type: 'application/octet-stream' });
 }
 
+const voiceDownloads = new Map();
+
 async function downloadVoiceData(voice) {
+  const key = voice.modelUrl;
+  if (voiceDownloads.has(key)) return voiceDownloads.get(key);
+  const pending = downloadVoiceDataOnce(voice);
+  voiceDownloads.set(key, pending);
+  try {
+    return await pending;
+  } finally {
+    if (voiceDownloads.get(key) === pending) voiceDownloads.delete(key);
+  }
+}
+
+async function downloadVoiceDataOnce(voice) {
   const total = voice.size_bytes || 0;
   emitPiperProgress({
     phase: 'downloading', voiceId: voice.id, voiceName: voice.name,
@@ -472,7 +487,7 @@ async function downloadVoiceData(voice) {
       percent: size ? Math.min(99, Math.round((loaded / size) * 100)) : 0,
     });
   });
-  emitPiperProgress({ phase: 'preparing', percent: 100 });
+  emitPiperProgress({ phase: 'preparing', detail: 'Saving voice for offline use…', percent: 100 });
   await putCachedVoice(voice.modelUrl, configData, blob);
   return { configData, blob };
 }
@@ -534,24 +549,26 @@ function resetPiperEngine() {
 async function getPiper() {
   if (piperPromise) return piperPromise;
   piperPromise = (async () => {
-    emitPiperProgress({ phase: 'preparing', percent: 100 });
+    emitPiperProgress({ phase: 'preparing', detail: 'Loading Piper speech engine…', percent: 100 });
     await loadPiperCatalog();
     const mod = await import('../vendor/piper/piper-tts-web.js');
     const base = new URL('../vendor/piper/', import.meta.url).href;
     const voiceProvider = new PiperVoiceProvider();
+    const onnxRuntime = new mod.OnnxWebWorkerRuntime({
+      basePath: `${base}onnx/`,
+      numThreads: 1,
+    });
+    const phonemizeRuntime = new mod.PhonemizeWebWorkerRuntime({
+      basePath: `${base}piper/`,
+    });
     const engine = new mod.PiperWebWorkerEngine({
-      onnxRuntime: new mod.OnnxWebWorkerRuntime({
-        basePath: `${base}onnx/`,
-        numThreads: 1,
-      }),
-      phonemizeRuntime: new mod.PhonemizeWebWorkerRuntime({
-        basePath: `${base}piper/`,
-      }),
+      onnxRuntime,
+      phonemizeRuntime,
       voiceProvider,
       expressionRuntime: { destroy() {} },
     });
     piperEngine = engine;
-    return { mod, engine, voiceProvider };
+    return { mod, engine, voiceProvider, onnxRuntime, phonemizeRuntime };
   })().catch(err => {
     piperPromise = null;
     console.error('Piper load failed', err);
@@ -696,8 +713,9 @@ export async function piperGenerate(text, voiceId, speaker = null, { priority = 
   }
 }
 
-/* Initialize the worker, encoder and first ONNX session while the app is
-   idle, so the first real sentence does not wait for a cold engine. */
+/* Initialize the workers, phonemizer and ONNX session while the app is idle.
+   Loading the session directly avoids synthesizing a dummy sentence before the
+   user's first real request. */
 const warmState = new Map();
 
 export async function warmPiperEngine(voiceId) {
@@ -711,10 +729,39 @@ export async function warmPiperEngine(voiceId) {
       warmState.set(voiceId, 'missing');
       return 'missing';
     }
-    await piperGenerate('Ready.', voice.id, getPrefs().tts.piperSpeaker || 0, { priority: 3, key: `warm|${voice.id}` });
+    await enqueuePiper(async () => {
+      notePiperActivity();
+      // The web runtime bundle and the selected voice are both large first-run
+      // assets. Fetch them together instead of waiting for one before starting
+      // the other.
+      const [runtime] = await Promise.all([
+        getPiper(),
+        downloadVoiceData(voice),
+      ]);
+      const { voiceProvider, phonemizeRuntime, onnxRuntime } = runtime;
+      const voiceData = await voiceProvider.fetch(voice.id);
+      await Promise.all([
+        (async () => {
+          emitPiperProgress({
+            phase: 'preparing', voiceId: voice.id, voiceName: voice.name,
+            detail: 'Loading pronunciation support…', percent: 100,
+          });
+          await awaitPiperJob(phonemizeRuntime.loadModule());
+        })(),
+        (async () => {
+          emitPiperProgress({
+            phase: 'preparing', voiceId: voice.id, voiceName: voice.name,
+            detail: 'Loading voice model…', percent: 100,
+          });
+          await awaitPiperJob(onnxRuntime.loadSession(voiceData));
+        })(),
+      ]);
+    }, { priority: 3, key: `warm|${voice.id}` });
     warmState.set(voiceId, 'ready');
+    settlePiperProgress();
     return 'ready';
   } catch (err) {
+    if (err?.code === 'stalled') resetPiperEngine();
     console.warn('Voice warm-up deferred', err);
     warmState.set(voiceId, 'failed');
     return 'failed';

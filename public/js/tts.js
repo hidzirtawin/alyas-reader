@@ -50,11 +50,11 @@ export function defaultVoiceURI() {
 /* Full Piper catalog: 178 official voices plus the Australian community model.
    The catalog is served locally; only the voice model is fetched from Hugging Face. */
 const FALLBACK_PIPER = [{
-  id: 'en_US-lessac-medium', name: 'Lessac', lang: 'en_US', language: 'English',
-  country: 'United States', quality: 'medium', num_speakers: 1, speaker_id_map: {},
-  size_bytes: 63201294,
-  modelUrl: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx',
-  configUrl: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json',
+  id: 'en_US-amy-low', name: 'Amy', lang: 'en_US', language: 'English',
+  country: 'United States', quality: 'low', num_speakers: 1, speaker_id_map: {},
+  size_bytes: 63104526,
+  modelUrl: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/low/en_US-amy-low.onnx',
+  configUrl: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/low/en_US-amy-low.onnx.json',
   accent: 'American', sizeMB: 60, community: false,
 }];
 
@@ -65,13 +65,24 @@ export function getPiperVoices() {
   return piperVoices.length ? piperVoices : FALLBACK_PIPER;
 }
 
+async function pruneNonFastVoices() {
+  try {
+    const records = await allVoiceRecords();
+    const allowed = new Set(piperVoices.map(v => v.modelUrl));
+    for (const record of records) {
+      if (record.custom) continue;
+      if (!allowed.has(record.id)) await deleteCachedVoice(record.id);
+    }
+  } catch {}
+}
+
 export function loadPiperCatalog() {
   if (piperCatalogPromise) return piperCatalogPromise;
   const build = document.querySelector('meta[name="app-build"]')?.content || 'dev';
   piperCatalogPromise = fetch(new URL(`../vendor/piper/voices.json?v=${build}`, import.meta.url), { cache: 'no-cache' })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('catalog missing')))
     .then(async data => {
-      const list = Array.isArray(data) ? data : data.voices || [];
+      const list = (Array.isArray(data) ? data : data.voices || []).filter(v => v.quality === 'low');
       piperVoices = list.map(v => ({
         ...v,
         accent: v.accent || (
@@ -82,13 +93,21 @@ export function loadPiperCatalog() {
         ),
         sizeMB: Math.max(1, Math.round((v.size_bytes || 0) / 1048576)),
       }));
-      await loadCustomVoices();
+      // This build is fast-voice only; imported/custom models are not listed.
+      piperVoices = piperVoices.filter(v => !v.custom);
+      const tts = getPrefs().tts;
+      if (tts.provider === 'piper' && !piperVoices.some(v => v.id === tts.piperVoice)) {
+        const fallback = piperVoices.find(v => v.id === 'en_US-amy-low')
+          || piperVoices.find(v => v.lang === 'en_US')
+          || piperVoices[0];
+        if (fallback) setTtsPrefs({ piperVoice: fallback.id, piperSpeaker: 0 });
+      }
+      pruneNonFastVoices().catch(() => {});
       return piperVoices;
     })
     .catch(async err => {
       console.warn('Piper catalog could not be loaded', err);
       piperVoices = FALLBACK_PIPER;
-      await loadCustomVoices();
       return piperVoices;
     });
   return piperCatalogPromise;
@@ -264,30 +283,7 @@ export function piperProgressLabel(p = piperProgress) {
    clones of Audible, Libby or OverDrive narrators — those are human or
    proprietary voices. The LibriVox preset uses LibriTTS, a model trained
    on LibriVox volunteer audiobook recordings. */
-export const PIPER_PRESETS = [
-  /* Regional and L2 English accents from the open VCTK and L2-ARCTIC corpora. */
-  { id: 'accent-british-london', name: 'British · London', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 81, rate: 0.96, desc: 'London English, male speaker.' },
-  { id: 'accent-british-birmingham', name: 'British · Birmingham', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 104, rate: 0.96, desc: 'Birmingham English, male speaker.' },
-  { id: 'accent-british-manchester', name: 'British · Manchester', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 1, rate: 0.97, desc: 'Manchester English, female speaker.' },
-  { id: 'accent-british-yorkshire', name: 'British · Yorkshire', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 12, rate: 0.96, desc: 'Yorkshire English, male speaker.' },
-  { id: 'accent-scottish', name: 'Scottish · Edinburgh', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 79, rate: 0.96, desc: 'Scottish English, male speaker.' },
-  { id: 'accent-northern-irish', name: 'Northern Irish · Belfast', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 17, rate: 0.96, desc: 'Northern Irish English, female speaker.' },
-  { id: 'accent-irish', name: 'Irish · Dublin', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 97, rate: 0.96, desc: 'Irish English, male speaker.' },
-  { id: 'accent-welsh', name: 'Welsh · Cardiff', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 88, rate: 0.97, desc: 'Welsh English, female speaker.' },
-  { id: 'accent-south-african-f', name: 'South African · Cape Town', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 35, rate: 0.96, desc: 'South African English, female speaker.' },
-  { id: 'accent-south-african-m', name: 'South African · Johannesburg', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 32, rate: 0.95, desc: 'South African English, male speaker.' },
-  { id: 'accent-indian', name: 'Indian English', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 92, rate: 0.96, desc: 'Indian English, male speaker.' },
-  { id: 'accent-australian', name: 'Australian · Sydney', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 71, rate: 0.96, desc: 'Australian English, male speaker.' },
-  { id: 'accent-new-zealand', name: 'New Zealand English', group: 'accent', tag: 'VCTK', voiceId: 'en_GB-vctk-medium', speaker: 42, rate: 0.96, desc: 'New Zealand English, female speaker.' },
-  { id: 'accent-mandarin', name: 'English · Mandarin accent', group: 'accent', tag: 'L2-ARCTIC', voiceId: 'en_US-l2arctic-medium', speaker: 0, rate: 0.95, desc: 'English with a Mandarin Chinese accent, male.' },
-  { id: 'accent-hindi', name: 'English · Hindi accent', group: 'accent', tag: 'L2-ARCTIC', voiceId: 'en_US-l2arctic-medium', speaker: 2, rate: 0.95, desc: 'English with a Hindi accent, female.' },
-  { id: 'accent-vietnamese', name: 'English · Vietnamese accent', group: 'accent', tag: 'L2-ARCTIC', voiceId: 'en_US-l2arctic-medium', speaker: 1, rate: 0.95, desc: 'English with a Vietnamese accent, female.' },
-  { id: 'accent-korean', name: 'English · Korean accent', group: 'accent', tag: 'L2-ARCTIC', voiceId: 'en_US-l2arctic-medium', speaker: 11, rate: 0.95, desc: 'English with a Korean accent, female.' },
-  { id: 'accent-au-matilda', name: 'Australian · Matilda', group: 'accent', tag: 'AU', voiceId: 'au_librivox', speaker: 7, rate: 0.96, desc: 'Australian English, female narrator.' },
-  { id: 'accent-au-marlo', name: 'Australian · Marlo', group: 'accent', tag: 'AU', voiceId: 'au_librivox', speaker: 2, rate: 0.93, desc: 'Warmer Australian female narrator, slightly slower.' },
-  { id: 'accent-au-banjo', name: 'Australian · Banjo', group: 'accent', tag: 'AU', voiceId: 'au_librivox', speaker: 5, rate: 0.95, desc: 'Australian English, male narrator.' },
-  { id: 'accent-au-flynn', name: 'Australian · Flynn', group: 'accent', tag: 'AU', voiceId: 'au_librivox', speaker: 6, rate: 0.95, desc: 'Classic Australian male narrator.' },
-];
+
 
 export function piperVoiceForLanguage(language = '') {
   const base = String(language).toLowerCase().replace('_', '-').split('-')[0];

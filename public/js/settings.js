@@ -10,7 +10,7 @@ import {
 import {
   previewSpeech, stopPreview, describeVoice,
   getPiperVoices, loadPiperCatalog, piperVoiceById, piperSpeakerName,
-  PIPER_PRESETS, onPiperProgress, piperProgressLabel,
+  onPiperProgress, piperProgressLabel,
   listCachedVoices, deleteCachedVoice, clearCachedVoices,
   importCustomVoice, removeCustomVoice,
 } from './tts.js';
@@ -608,7 +608,7 @@ export async function openVoiceModal({ onSaved } = {}) {
   body.innerHTML = `
     <div class="provider-tabs" role="tablist" aria-label="Narration mode">
       <button class="provider-tab" data-tab="silent" role="tab">${icon('eye-off')} Silent</button>
-      <button class="provider-tab" data-tab="piper" role="tab">${icon('headphones')} Piper <span class="tag">Free</span></button>
+      <button class="provider-tab" data-tab="piper" role="tab">${icon('headphones')} Fast Piper <span class="tag">Free</span></button>
     </div>
     <div id="voiceTabBody"></div>
     <div class="divider" style="margin:18px 0 14px"></div>
@@ -633,7 +633,7 @@ export async function openVoiceModal({ onSaved } = {}) {
   const m = modal({
     eyebrow: 'Narration',
     title: 'Choose how Alya’s Reader speaks',
-    subtitle: 'Free, offline neural voices from Piper — with regional accents and full speaker control.',
+    subtitle: 'Fast, offline neural voices from Piper — built for low-latency playback on phones.',
     body,
     foot,
     wide: true,
@@ -716,26 +716,6 @@ export async function openVoiceModal({ onSaved } = {}) {
         </div>
         <p class="preset-note">These lower-quality models generate faster and often stay ahead of playback on slower phones. Pick a regional voice below for the best quality.</p>
       </div>
-      <div class="presets">
-        <div class="presets-head"><span>Regional accents</span><span class="dim">${PIPER_PRESETS.length} voices · VCTK · L2-ARCTIC · AU</span></div>
-        <div class="preset-grid">
-          ${PIPER_PRESETS.map(p => {
-            const active = p.voiceId === draft.piperVoice
-              && Number(p.speaker || 0) === Number(draft.piperSpeaker || 0)
-              && Math.abs(Number(p.rate ?? draft.rate) - Number(draft.rate)) < 0.001;
-            return `<button class="preset${active ? ' is-active' : ''}" data-preset="${esc(p.id)}">
-              <span class="preset-name">${esc(p.name)}${p.tag ? `<em>${esc(p.tag)}</em>` : ''}</span>
-              <span class="preset-desc">${esc(p.desc)}</span>
-            </button>`;
-          }).join('')}
-        </div>
-        <p class="preset-note">Original open voices from the <strong>VCTK</strong>, <strong>L2-ARCTIC</strong> and Australian LibriVox corpora. These are real accent characteristics, not celebrity impersonations.</p>
-      </div>
-      <div class="custom-import">
-        <button class="btn btn-sm" id="importVoice">${icon('upload')} Import a Piper voice</button>
-        <input type="file" id="importVoiceFile" accept=".onnx,.json,.zip" multiple hidden>
-        <p class="hint">Bring a Piper-compatible <strong>.onnx</strong> + <strong>.onnx.json</strong> (or a zip) from any open project. Models trained on <a href="https://github.com/common-voice/common-voice" target="_blank" rel="noopener noreferrer">Mozilla Common Voice</a> or other open datasets stay on this device.</p>
-      </div>
       <div class="field" style="margin-bottom:10px;margin-top:12px">
         <label>Piper voices <span class="dim" style="font-weight:400">· ${all.length} voices · free · offline</span></label>
         <div style="display:flex;gap:8px;margin-top:2px">
@@ -756,7 +736,7 @@ export async function openVoiceModal({ onSaved } = {}) {
         <span class="voice-progress-pct" id="voiceProgressPct">0%</span>
         <span class="voice-progress-text" id="voiceProgressText">Downloading voice…</span>
       </div>
-      <p class="hint" style="margin-top:10px">The first preview loads the model and shows live progress; later sentences are generated while the previous one plays. Australian English is a community model. Sources: <a href="https://github.com/rhasspy/piper" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">rhasspy/piper</a> · <a href="https://huggingface.co/rhasspy/piper-voices" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">voice models</a>.</p>`;
+      <p class="hint" style="margin-top:10px">Only low-latency Piper voices are included. Models download once and stay cached offline; later sentences are generated while the previous one plays. Sources: <a href="https://github.com/rhasspy/piper" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">rhasspy/piper</a> · <a href="https://huggingface.co/rhasspy/piper-voices" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">voice models</a>.</p>`;
   }
 
   function renderPiperList() {
@@ -896,7 +876,7 @@ export async function openVoiceModal({ onSaved } = {}) {
 
   async function testVoice(btn) {
     const probe = { ...draft, enabled: true, provider: tab === 'silent' ? original.provider || 'piper' : tab };
-    if (probe.provider === 'piper' && !probe.piperVoice) probe.piperVoice = 'en_US-lessac-medium';
+    if (probe.provider === 'piper' && !probe.piperVoice) probe.piperVoice = 'en_US-amy-low';
     if (probe.provider === 'piper') probe.piperSpeaker = draft.piperSpeaker || 0;
     btn.disabled = true;
     const old = btn.innerHTML;
@@ -948,16 +928,6 @@ export async function openVoiceModal({ onSaved } = {}) {
       draft.piperSpeaker = 0;
       renderPiperList();
       return;
-    }
-    const presetBtn = e.target.closest('[data-preset]');
-    if (presetBtn) {
-      const preset = PIPER_PRESETS.find(p => p.id === presetBtn.dataset.preset);
-      if (preset) {
-        draft.piperVoice = preset.voiceId;
-        draft.piperSpeaker = Number(preset.speaker || 0);
-        draft.rate = Number(preset.rate ?? draft.rate);
-        renderTabs();
-      }
     }
   });
 

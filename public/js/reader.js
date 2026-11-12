@@ -15,7 +15,7 @@ import {
 } from './ui.js';
 import { openBookDetails } from './details.js';
 import { downloadBookAudio } from './audioexport.js';
-import { openVoiceModal } from './settings.js';
+import { openVoiceModal } from './settings.js?v=fastvoices1';
 import { openDictionary } from './dictionary.js';
 import { getSleepTimer, startSleepTimer, cancelSleepTimer, formatSleepRemaining } from './sleep.js';
 import { createAudiobook, audiobookChapters } from './audiobook.js';
@@ -2845,7 +2845,7 @@ function openAudiobookDialog(state) {
   const whole = audiobookChapters(state, 'book');
   const single = audiobookChapters(state, 'chapter');
   if (!whole.length) { toast('No readable text was found for an audiobook.', 'err'); return; }
-  let audioVoiceId = allVoices.some(v => v.id === tts.piperVoice) ? tts.piperVoice : (allVoices[0]?.id || 'en_US-libritts_r-medium');
+  let audioVoiceId = allVoices.some(v => v.id === tts.piperVoice) ? tts.piperVoice : (allVoices[0]?.id || 'en_US-amy-low');
   let audioSpeaker = Number(tts.piperSpeaker) || 0;
 
   const body = document.createElement('div');

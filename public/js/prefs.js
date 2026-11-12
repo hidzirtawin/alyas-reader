@@ -46,7 +46,7 @@ const DEFAULTS = {
   tts: {
     enabled: true,
     provider: 'piper',
-    piperVoice: 'en_US-libritts_r-medium',
+    piperVoice: 'en_US-amy-low',
     piperSpeaker: 0,
     voiceURI: '',
     rate: 0.96,

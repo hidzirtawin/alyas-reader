@@ -26,10 +26,10 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 - **HTML / ODT / RTF / FB2** — HTML is sanitised and flattened into readable chapters, ODT reads the OpenDocument text, RTF is converted to clean paragraphs, and FB2 fiction books keep their sections and titles.
 - **TXT / Markdown** — plain-text chapter detection, plus a safe Markdown renderer for headings, lists, quotes, code, links and emphasis.
 - **Comics (CBZ / CBR)** — page-by-page viewer with natural page ordering, ComicInfo.xml metadata, first-page covers, a page-number grid, jump-to-page, zoom and swipe/keyboard page turns. CBR support uses a bundled WASM build of libarchive (RAR v4 and v5).
-- **Natural narration** — the full **Piper** catalog: 179 free neural voices across 30+ languages, including American, British, Scottish, Northern/Southern English and Australian accents. Runs locally in the browser — the default is an audiobook-style voice that downloads once in the background.
+- **Fast narration** — 26 free, low-latency **Piper** neural voices across 13 languages, including American and British English. Runs locally in the browser; the default Amy voice downloads once in the background.
 - **Silent reading** — switch narration off entirely in Settings or the voice picker. The reader becomes text-only and the Listen controls disappear.
 - **Listen along** — sentence-by-sentence playback with current-word highlighting, auto-scroll, previous/next sentence, fine-grained speed control, and a whole-book seek bar with estimated elapsed/total time. The next sentences are generated and decoded ahead, so playback stays gapless across sentences and chapters. The voice engine warms in the background and the opening sentences are pre-generated when a book opens, so the first tap often starts instantly.
-- **Make an audiobook** — from the book menu, render a whole book or one chapter/page into a **single MP3 file**, or into **MP3 chapter files** bundled in a zip with an `m3u` playlist and metadata. Choose any Piper voice and speaker for the export, independent of your reading voice, and preview the sample before starting. The library card menu, book details and reader menu also offer a one-click **Download audio** action that renders the whole book to a single MP3. Encoded chapters are saved on-device as they are made, so a reload resumes the export, and the finished file is downloaded from disk instead of being held in memory. Sentences are batched into larger synthesis calls and one MP3 encoder is used per chapter to keep local generation as fast as possible. The export automatically pauses while narration is playing so listening stays smooth, then resumes when you pause. No Audible account, DRM or cloud service is involved. Comic pages are images, so narration is unavailable there.
+- **Make an audiobook** — from the book menu, render a whole book or one chapter/page into a **single MP3 file**, or into **MP3 chapter files** bundled in a zip with an `m3u` playlist and metadata. Choose any fast Piper voice for the export, independent of your reading voice, and preview the sample before starting. The library card menu, book details and reader menu also offer a one-click **Download audio** action that renders the whole book to a single MP3. Encoded chapters are saved on-device as they are made, so a reload resumes the export, and the finished file is downloaded from disk instead of being held in memory. Sentences are batched into larger synthesis calls and one MP3 encoder is used per chapter to keep local generation as fast as possible. The export automatically pauses while narration is playing so listening stays smooth, then resumes when you pause. No Audible account, DRM or cloud service is involved. Comic pages are images, so narration is unavailable there.
 - **Languages** — books are detected automatically (script and stop-word analysis, plus EPUB/ODT/FB2 metadata). Non-English books use a matching Piper voice when one is available, and hyphenation follows the book’s language.
 - **Dictionary** — select a word and tap **Define**, or double-click it. A public-domain Webster’s 1913 dictionary is stored offline; other languages also get a Wiktionary link.
 - **Move around** — previous/next chapter buttons sit in the reader footer, the chapter label opens contents, and a chapter dropdown jumps straight to any section. Press `G` for PDF/comic page jumps or a chapter-and-position jump.
@@ -51,29 +51,20 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 
 Open **Settings → Voice & narration → Configure**, or the voice button in the reader.
 
-### Piper — free, offline, default
+### Piper — free, offline, fast voices
 
-Alya’s Reader runs [Piper](https://github.com/rhasspy/piper) (MIT) entirely in your browser. The full catalog is included:
+Alya’s Reader runs [Piper](https://github.com/rhasspy/piper) (MIT) entirely in your browser. This build includes a focused catalog of **26 low-latency voices**:
 
-- **179 voices** across 30+ languages
-- American, British, Scottish, Northern English, Southern English and **Australian** accents
-- Multi-speaker models with a searchable, expandable speaker browser
-- **Fast voices** — a dedicated low-latency section (Amy, Ryan, Alan) synthesizes quicker on phones, with a deeper look-ahead buffer for smoother playback
-- Adjustable 0.5×–2× speed and a **pause-between-sentences** control for natural reading rhythm
+- American and British English, Arabic, Czech, Dutch, Finnish, French, German, Greek, Polish, Portuguese (Brazil), Spanish and Vietnamese
+- Single-speaker models selected for quicker synthesis on phones
+- Adjustable 0.5×–2× speed and a **pause-between-sentences** control
 - A live **download progress bar** (percent and megabytes) in the voice picker and the reading dock
-- The full **LibriVox (LibriTTS)** catalog exposes all **2,306 speakers** in a searchable list — browse 60 at a time or search by name/number
-- The voice/speaker you pick appears in a visible chip in the reader header; tap it to change voices
-- **Regional accents from open research corpora** — VCTK British, Scottish, Northern Irish, Irish, Welsh, South African, Indian and New Zealand English; four Australian voices from the AU LibriVox model (Matilda, Marlo, Banjo and Flynn); L2-ARCTIC Mandarin-, Hindi-, Vietnamese- and Korean-accented English
+- The selected voice appears in a chip in the reader header; tap it to change voices
+- The first three sentences of a book are generated when the book opens, so the first Listen tap starts quickly
 
-The default voice is **LibriVox (LibriTTS)** with 2,306 speakers. It starts downloading in the background the first time you open the app, with a progress bar, and is cached for offline use. The first time you choose any other voice, its model is downloaded from Hugging Face and stored in the browser. Models range from about 20 MB to 115 MB; after that the voice works offline. No account or API key is involved, and your book text never leaves your device.
+The default voice is **Amy** (US English). Its model downloads once in the background and is cached for offline use. Choosing another voice downloads its model from Hugging Face and stores it in the browser. Models range from about 28 MB to 70 MB. No account or API key is involved, and your book text never leaves your device.
 
-The Australian voice is a community LibriVox model by DataCraftsmanAustralia, licensed **CC-BY-4.0**. Its ten speakers are available in the speaker picker.
-
-**Not included:** a Texas-drawl preset, celebrity clones, or the proprietary narrators used by Audible, Libby and OverDrive. Those narrators are human or licensed voices, and unauthorized impersonations are intentionally excluded. The audiobook and accent voices are original open Piper voices chosen for a similar feel.
-
-### Importing a voice
-
-Any Piper-compatible `.onnx` model with its `.onnx.json` config (or a zip containing both) can be imported from **Settings → Voice & narration → Configure → Piper → Import a Piper voice**. This is the way to use community models trained on [Mozilla Common Voice](https://github.com/common-voice/common-voice), LibriTTS or other open datasets. The files stay in your browser and can be removed from the same panel.
+**Not included:** medium/high-quality models, multi-speaker catalogs, regional accent packs, celebrity clones, or the proprietary narrators used by Audible, Libby and OverDrive. Those narrators are human or licensed voices, and unauthorized impersonations are intentionally excluded.
 
 ### No voice at all
 
@@ -184,9 +175,6 @@ public/
 - [piper-tts-web](https://github.com/Poket-Jony/piper-tts-web) (MIT) — browser/WASM wrapper and worker runtime
 - [Piper voice models](https://huggingface.co/rhasspy/piper-voices) (MIT) — official voice catalog
 - [lamejs](https://github.com/zhuker/lamejs) (LGPL-3.0) — MP3 encoding for audiobook exports
-- [Australian LibriVox Piper voice](https://huggingface.co/DataCraftsmanAustralia/piper-en_AU-librivox-medium) by DataCraftsmanAustralia (CC-BY-4.0)
-- [VCTK Corpus](https://datashare.ed.ac.uk/handle/10283/2950) (CC BY 4.0) — regional English accent speakers used by the VCTK Piper voice
-- [L2-ARCTIC](https://psi.engr.tamu.edu/l2-arctic-corpus/) (CC BY-NC 4.0) — non-native English accent speakers used by the L2-ARCTIC Piper voice
 - [Webster’s English Dictionary](https://github.com/matthewreagan/WebstersEnglishDictionary) — public-domain Webster’s Unabridged 1913 data
 - Typefaces: Literata, Merriweather, Lora, EB Garamond, Libre Baskerville, Source Serif 4, Atkinson Hyperlegible, Lexend, Inter, OpenDyslexic and Fraunces (SIL Open Font License), served locally from Fontsource builds.
 

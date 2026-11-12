@@ -65,7 +65,7 @@ const app = {
     }
     app.view = view;
     const meta = {
-      library: ['Your audiobooks', 'Turn your own books and documents into MP3s—locally.'],
+      library: ['Your audiobooks', 'Make MP3s locally or open Voice-Generator inside the Reader.'],
       bookmarks: ['Marks & notes', 'Bookmarks, highlights and thoughts — kept locally.'],
       settings: ['Settings', 'Make Alya’s Reader yours.'],
     }[view];

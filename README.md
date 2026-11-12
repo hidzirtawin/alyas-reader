@@ -1,8 +1,8 @@
 # Alya’s Reader
 
-A local audiobook studio and reader for your own files. Upload **EPUB, PDF, DOCX, ODT, RTF, HTML, FB2, TXT or Markdown** and turn them into a single MP3 or a chapter ZIP using fast voices on this device. You can also read your books here. Comic files remain readable, but image-only comics cannot become audiobooks.
+A local audiobook studio and reader for your own files. Upload **EPUB, PDF, DOCX, ODT, RTF, HTML, FB2, TXT or Markdown** and turn them into a single MP3 or a chapter ZIP using fast voices on this device. You can also open Voice-Generator inside the Reader as an optional outside service. Comic files remain readable, but image-only comics cannot become audiobooks.
 
-Your books stay in your browser. No accounts, no cloud library, no uploads. Voice models download once from the open Piper catalog.
+Your library stays in this browser. Local Piper exports do not upload book text. Voice-Generator is optional and has its own processing; the app explains this before opening it.
 
 ```
 node server.js        # or: npm start
@@ -13,7 +13,7 @@ Requires Node.js 18 or newer. There are **no npm dependencies** — the browser 
 
 **Live site:** https://hidzirtawin.github.io/alyas-reader/
 
-The hosted build is static. **Piper** neural voices run entirely in the browser and work on both the hosted and local versions. A voice model downloads once from Hugging Face, is cached by the browser, and then works offline. No accounts or API keys.
+The hosted build is static. **Piper** neural voices run entirely in the browser and work on both the hosted and local versions. A voice model downloads once from Hugging Face, is cached by the browser, and then works offline. No account or API key is needed for local Piper.
 
 ---
 
@@ -27,9 +27,10 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 - **TXT / Markdown** — plain-text chapter detection, plus a safe Markdown renderer for headings, lists, quotes, code, links and emphasis.
 - **Comics (CBZ / CBR)** — page-by-page reader with natural page ordering, ComicInfo.xml metadata, first-page covers, a page-number grid, jump-to-page, zoom and swipe/keyboard page turns. Image-only pages can’t be rendered as speech. CBR support uses a bundled WASM build of libarchive (RAR v4 and v5).
 - **Fast narration** — 26 free, low-latency **Piper** neural voices across 13 languages, including American and British English. Runs locally in the browser; the default Amy voice downloads once in the background.
+- **Voice-Generator option** — open its EPUB-to-Audio page inside Alya’s Reader and close it to return. It is a third-party service: EPUB text is sent to its hosted TTS service, and PDFs are uploaded for extraction. A privacy notice appears before opening it.
 - **Silent reading** — switch narration off entirely in Settings or the voice picker. The reader becomes text-only and the Listen controls disappear.
 - **Listen along** — sentence-by-sentence playback with current-word highlighting, auto-scroll, previous/next sentence, fine-grained speed control, and a whole-book seek bar with estimated elapsed/total time. The voice engine warms in the background and opening sentences are pre-generated to reduce startup delay and gaps. Fast voices are recommended on phones.
-- **Make audiobook chapters** — choose a whole book or one chapter/page, then create a zip of **MP3 chapter files** with an `m3u` playlist and metadata. Preview a fast Piper voice before exporting. For a one-click single-file export, use **Download audio** from the library card menu, book details or reader menu. That full-book MP3 is saved on-device as chapters are encoded, resumes after a reload and downloads from disk rather than memory. No Audible account, DRM or cloud service is involved. Comic pages are images, so narration is unavailable there.
+- **Make audiobook chapters** — choose a whole book or one chapter/page, then create a zip of **MP3 chapter files** with an `m3u` playlist and metadata. Preview a fast Piper voice before exporting. For a one-click single-file export, use **Download audio** from the library card menu, book details or reader menu. That full-book MP3 is saved on-device as chapters are encoded, resumes after a reload and downloads from disk rather than memory. Comic pages are images, so narration is unavailable there.
 - **Languages** — books are detected automatically (script and stop-word analysis, plus EPUB/ODT/FB2 metadata). Non-English books use a matching Piper voice when one is available, and hyphenation follows the book’s language.
 - **Dictionary** — select a word and tap **Define**, or double-click it. A public-domain Webster’s 1913 dictionary is stored offline; other languages also get a Wiktionary link.
 - **Move around** — previous/next chapter buttons sit in the reader footer, the chapter label opens contents, and a chapter dropdown jumps straight to any section. Press `G` for PDF/comic page jumps or a chapter-and-position jump.
@@ -62,7 +63,11 @@ Alya’s Reader runs [Piper](https://github.com/rhasspy/piper) (MIT) entirely in
 - The selected voice appears in a chip in the reader header; tap it to change voices
 - The first three sentences of a book are generated when the book opens, so the first Listen tap starts quickly
 
-The default voice is **Amy** (US English). Its model downloads once in the background and is cached for offline use. Choosing another voice downloads its model from Hugging Face and stores it in the browser. Models range from about 28 MB to 70 MB. No account or API key is involved, and your book text never leaves your device.
+The default voice is **Amy** (US English). Its model downloads once in the background and is cached for offline use. Choosing another voice downloads its model from Hugging Face and stores it in the browser. Models range from about 28 MB to 70 MB. No account or API key is needed for local use; local Piper never sends book text away from the device.
+
+### Voice-Generator (optional third-party service)
+
+Use the **Voice-Generator** button in the library to open its EPUB-to-Audio page in an embedded panel. Alya’s Reader remains open, but you must select a file in Voice-Generator’s own file picker; a book in Alya’s library is not transferred automatically. For EPUBs, its converter extracts text in the browser and sends text chunks to its hosted TTS service. Its PDF path uploads the selected PDF for extraction. Use only if you accept that processing. The **Open separately** option is available if embedding does not work in your browser.
 
 **Not included:** medium/high-quality models, multi-speaker catalogs, regional accent packs, celebrity clones, or the proprietary narrators used by Audible, Libby and OverDrive. Those narrators are human or licensed voices, and unauthorized impersonations are intentionally excluded.
 
@@ -107,10 +112,10 @@ Piracy mirrors (LibGen, Z-Library, Anna's Archive, PDF Drive and similar) are de
 
 ## Privacy
 
-- Book files are read locally and stored in **IndexedDB** as blobs. They are never uploaded to a server.
+- Book files are read locally and stored in **IndexedDB** as blobs. Alya’s Reader does not upload its stored book files. If you separately select a PDF in Voice-Generator, that service uploads the selected PDF for extraction.
 - Reading positions, bookmarks, highlights and notes are also local.
 - Settings use localStorage.
-- When you choose a Piper voice, its model and voice tensor are downloaded once from Hugging Face and cached in your browser. After that, narration is fully offline. Your book text is never sent anywhere.
+- When you choose a Piper voice, its model and voice tensor are downloaded once from Hugging Face and cached in your browser. After that, local narration and exports work offline. Your book text stays on-device when using local Piper.
 - “Export notes & data” downloads a JSON file with metadata, positions, bookmarks, highlights and settings. Book files are not included.
 - “Delete all books & marks” erases the local database; settings remain.
 

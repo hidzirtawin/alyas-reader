@@ -1251,6 +1251,17 @@ mark.hl-rose { background: color-mix(in srgb, #e0909d 36%, transparent); }
 .modal-head .icon-btn { margin-left: auto; flex: none; }
 .modal-body { padding: 4px 24px 22px; overflow-y: auto; }
 
+/* Keep the optional Voice-Generator handoff inside the reader window. */
+.voice-generator-disclosure { display: grid; gap: 11px; line-height: 1.6; }
+.voice-generator-disclosure p { color: var(--ink-2); font-size: 13px; }
+.voice-generator-embed { display: flex; flex-direction: column; gap: 8px; }
+.voice-generator-embed > .hint { margin: 0; }
+.voice-generator-embed iframe {
+  display: block; width: 100%; height: min(66dvh, 700px); min-height: 360px;
+  border: 1px solid var(--line); border-radius: 12px; background: #fff;
+}
+.voice-generator-modal .modal-body { padding: 4px 14px 16px; }
+
 /* Sleep timer */
 .sleep-veil {
   position: fixed; inset: 0; z-index: 400;
@@ -1615,6 +1626,9 @@ kbd { font-family: var(--font-ui); font-size: 10px; font-weight: 600; min-width:
   .modal { border-radius: 18px; max-height: 90dvh; }
   .modal-head { padding: 20px 18px 12px; }
   .modal-body { padding: 4px 18px 18px; }
+  .modal.voice-generator-modal { width: 100%; max-height: 96dvh; border-radius: 16px; }
+  .voice-generator-modal .modal-body { padding: 2px 10px 12px; }
+  .voice-generator-embed iframe { height: 66dvh; min-height: 300px; }
   .modal-foot { padding: 14px 18px; }
   .voice-grid { grid-template-columns: repeat(2, 1fr); }
   .provider-tabs { grid-template-columns: 1fr; }

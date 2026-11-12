@@ -61,6 +61,7 @@ export function renderLibrary(app) {
       <h2>${query ? 'Search results' : (activeCollection || 'All books')}</h2>
       <span class="count">${filtered.length}${query ? ` of ${inCollection.length}` : ''}</span>
       <span class="spacer"></span>
+      <button class="btn btn-sm" data-voice-generator>${icon('headphones')} Voice-Generator</button>
       ${query ? '' : `<label class="sort-wrap">
         <select id="librarySort" aria-label="Sort library">
           <option value="recent"${prefs.librarySort === 'recent' ? ' selected' : ''}>Recently read</option>
@@ -184,9 +185,10 @@ function emptyStateMarkup() {
     <section class="empty-hero">
       <div class="empty-copy">
         <div class="eyebrow">Private audiobook studio</div>
-        <p>Turn your own EPUB, PDF, Word, ODT, RTF, HTML, FB2, Markdown or text files into a single MP3 audiobook. Fast voices run on this device; your book never gets uploaded. You can still read and listen here, too.</p>
+        <p>Turn your own EPUB, PDF, Word, ODT, RTF, HTML, FB2, Markdown or text files into a single MP3 audiobook. Fast voices run on this device by default. You can also open Voice-Generator here as an optional outside tool.</p>
         <div class="empty-actions">
           <button class="btn btn-primary" data-add>${icon('download')} Add files to make an MP3</button>
+          <button class="btn" data-voice-generator>${icon('headphones')} Use Voice-Generator</button>
           <button class="btn" data-free-books>${icon('book')} Free books</button>
           <button class="btn btn-quiet" data-demo-shortcuts>${icon('keyboard')} Shortcuts</button>
         </div>
@@ -210,12 +212,16 @@ function emptyStateMarkup() {
     <div class="feature-strip">
       <div class="feature"><div class="fi">${icon('download')}</div><div><strong>One whole-book MP3</strong><p>Download a single audiobook file, or make a chapter ZIP with a playlist.</p></div></div>
       <div class="feature"><div class="fi">${icon('headphones')}</div><div><strong>Fast local voices</strong><p>26 low-latency Piper voices create audio offline. Progress survives a reload.</p></div></div>
-      <div class="feature"><div class="fi">${icon('shield')}</div><div><strong>Your files stay private</strong><p>Books and audio exports stay in this browser. Nothing is uploaded.</p></div></div>
+      <div class="feature"><div class="fi">${icon('shield')}</div><div><strong>Private by default</strong><p>Local Piper stays on-device; Voice-Generator is optional and clearly labeled.</p></div></div>
     </div>`;
 }
 
 /* ── Events ───────────────────────────────────────────────────────── */
 function onLibraryClick(app, e) {
+  if (e.target.closest('[data-voice-generator]')) {
+    openVoiceGenerator();
+    return;
+  }
   const menuBtn = e.target.closest('[data-menu]');
   if (menuBtn) {
     e.preventDefault();
@@ -261,6 +267,45 @@ function onLibraryClick(app, e) {
     const book = app.books.find(b => b.id === card?.dataset.bookId);
     if (book) app.openBook(book.id, targetFromProgress(app.progress.get(book.id), false));
   }
+}
+
+function openVoiceGenerator() {
+  const url = 'https://voice-generator.com/epub-to-audio';
+  const consent = modal({
+    eyebrow: 'Third-party audiobook tool',
+    title: 'Voice-Generator.com',
+    subtitle: 'Opens inside Alya’s Reader. Close the panel to return to your book.',
+    body: `<div class="voice-generator-disclosure">
+      <p>Choose an EPUB or PDF using the embedded page’s file picker. Alya’s Reader stays open behind this panel; a book in the Reader library is <strong>not transferred automatically</strong>.</p>
+      <p><strong>Privacy:</strong> Voice-Generator extracts EPUB text in your browser, then sends text chunks to its hosted text-to-speech service. Its PDF converter uploads the PDF to a service for text extraction. This is a third-party service, not your device.</p>
+      <p>For a very long book, the resulting audiobook can take a while and may be a large download.</p>
+    </div>`,
+    foot: `<button class="btn" data-vg-cancel>Cancel</button><button class="btn btn-primary" data-vg-continue>${icon('headphones')} Continue to Voice-Generator</button>`,
+    wide: true,
+  });
+  consent.footEl.querySelector('[data-vg-cancel]')?.addEventListener('click', () => consent.close('cancel'));
+  consent.footEl.querySelector('[data-vg-continue]')?.addEventListener('click', () => {
+    consent.close('continue');
+    const body = document.createElement('div');
+    body.className = 'voice-generator-embed';
+    body.innerHTML = '<p class="hint">Voice-Generator is a separate service embedded here. Your Reader will still be here when you close this panel.</p>';
+    const frame = document.createElement('iframe');
+    frame.src = url;
+    frame.title = 'Voice-Generator EPUB to Audio';
+    frame.referrerPolicy = 'no-referrer';
+    frame.loading = 'eager';
+    body.append(frame);
+    const embedded = modal({
+      eyebrow: 'Third-party service',
+      title: 'Voice-Generator',
+      subtitle: 'Choose an EPUB or PDF below. Alya’s Reader stays open behind this panel.',
+      body,
+      foot: `<a class="btn" href="${url}" target="_blank" rel="noopener noreferrer">Open separately</a><button class="btn btn-primary" data-vg-done>Return to Alya’s Reader</button>`,
+      wide: true,
+    });
+    embedded.panel.classList.add('voice-generator-modal');
+    embedded.footEl.querySelector('[data-vg-done]')?.addEventListener('click', () => embedded.close('done'));
+  });
 }
 
 function targetFromProgress(progress, autoplay) {

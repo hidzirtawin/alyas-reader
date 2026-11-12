@@ -53,7 +53,7 @@ const SECURITY_HEADERS = {
     "media-src 'self' blob:",
     // Voice models and voice tensors are fetched once from Hugging Face.
     "connect-src 'self' blob: data: https://huggingface.co https://*.huggingface.co https://*.hf.co",
-    "frame-src 'none'",
+    "frame-src https://voice-generator.com",
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",

@@ -44,7 +44,7 @@ The hosted build is static. **Piper** neural voices run entirely in the browser 
 - **Refresh-safe** — uploaded books, settings, positions, bookmarks and highlights live in IndexedDB. Files that were mid-import when the page refreshed are kept and the import resumes automatically on the next load.
 - **Library backup** — download one zip containing every book file, cover, reading position, bookmark and note; restore it on this or another device. A lightweight notes-only export is also available.
 - **Collections** — group books from the book menu, then filter the library with collection chips.
-- **Interruption recovery** — if the browser reloads or interrupts playback, Alya’s Reader reopens the same book and chapter and resumes narration automatically where the browser allows it. Narration uses Web Audio, so iOS keeps playing through the lock screen and the ring/silent switch, survives phone calls, and starts again as soon as you touch the page. A stalled or failed voice generation is retried automatically instead of ending the session. After a phone reload, a visible **Play** banner restores the saved sentence with one tap.
+- **Interruption recovery** — if the browser reloads or interrupts playback, Alya’s Reader reopens the same book and chapter and resumes narration automatically where the browser allows it. Narration uses Web Audio, so iOS keeps playing through the lock screen and the ring/silent switch, survives phone calls, and starts again as soon as you touch the page. A stalled or failed voice generation is retried automatically instead of ending the session. After a phone reload, a visible **Play** banner resumes at the exact saved sentence and position with one tap.
 - **Keyboard-first** — see shortcuts below.
 
 ## Narration

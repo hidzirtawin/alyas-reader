@@ -31,14 +31,31 @@ const READER_SESSION = 'alya.reader.session';
 
 function rememberReadingSession(state) {
   if (!state || state.destroyed || !state.bookId) return;
+  const engine = state.engine;
+  let sentenceIndex = null;
+  let sentenceFraction = 0;
+  try {
+    if (engine?.sentences?.length) {
+      sentenceIndex = Number.isFinite(engine.index) ? engine.index : null;
+      sentenceFraction = Number(engine.getSentenceProgress?.() || 0);
+    }
+  } catch {}
+  const resume = state.resumePoint;
+  if (sentenceIndex == null && resume) {
+    sentenceIndex = resume.sentenceIndex;
+    sentenceFraction = resume.fraction || 0;
+  }
   try {
     sessionStorage.setItem(READER_SESSION, JSON.stringify({
       bookId: state.bookId,
       chapterIndex: state.chapterIndex || 0,
-      page: state.page || null,
+      page: state.mode === 'pdf' ? (state.ttsPage || resume?.page || state.page || null) : (state.page || null),
       ratio: state.ratio || 0,
       at: Date.now(),
-      playing: state.engine?.state === 'playing' || state.engine?.state === 'loading',
+      playing: engine?.state === 'playing' || engine?.state === 'loading' || state.resumePending === true,
+      ttsSentenceIndex: sentenceIndex,
+      ttsFraction: sentenceFraction,
+      ttsPage: state.ttsPage || resume?.page || null,
     }));
   } catch {}
 }
@@ -57,8 +74,11 @@ export function restoreReadingSession(app) {
   }
   const target = {
     chapterIndex: saved.chapterIndex || 0,
-    page: saved.page || undefined,
+    page: saved.ttsPage || saved.page || undefined,
     ratio: saved.ratio || 0,
+    ttsSentenceIndex: saved.ttsSentenceIndex ?? null,
+    ttsFraction: saved.ttsFraction || 0,
+    ttsPage: saved.ttsPage || null,
   };
   setTimeout(() => { app.openBook(saved.bookId, target); }, 250);
   if (saved.playing) {
@@ -100,6 +120,12 @@ export async function openReader(app, bookId, target = {}) {
     record,
     blob,
     target: target || {},
+    resumePoint: target && target.ttsSentenceIndex != null ? {
+      chapterIndex: target.chapterIndex || 0,
+      page: target.ttsPage || target.page || null,
+      sentenceIndex: Number(target.ttsSentenceIndex) || 0,
+      fraction: Number(target.ttsFraction) || 0,
+    } : null,
     mode: record.format === 'pdf' ? 'pdf' : isComicFormat(record.format) ? 'comic' : 'reflow',
     book: null,
     pdfView: null,
@@ -180,8 +206,21 @@ export async function openReader(app, bookId, target = {}) {
   wireEvents(state);
   updateReaderVoiceChip(state);
   app.pauseTTS = () => state.engine?.pause();
-  app.resumeTTS = () => startTTS(state, { autoplay: true });
-  app.prepareTTS = () => startTTS(state, { autoplay: false, paused: true });
+  app.resumeTTS = () => {
+    state.resumePending = false;
+    const engine = state.engine;
+    if (engine?.sentences?.length && engine.state !== 'playing' && engine.state !== 'loading') {
+      hideResumeBanner();
+      engine.play();
+      updateMediaSession(state);
+      return true;
+    }
+    return startTTS(state, { autoplay: true });
+  };
+  app.prepareTTS = () => {
+    state.resumePending = true;
+    return startTTS(state, { autoplay: false, paused: true });
+  };
   app.showResumeBanner = () => showResumeBanner(state);
   app.stopTTS = () => { state.engine?.stop(); closeTTS(state); };
 
@@ -396,8 +435,8 @@ function wireEvents(state) {
   document.addEventListener('mousedown', onDocDown, true);
   state.cleanup.push(() => document.removeEventListener('mousedown', onDocDown, true));
 
-  const onVis = () => { if (document.visibilityState === 'hidden') saveProgressNow(state); };
-  const onUnload = () => { saveProgressNow(state); };
+  const onVis = () => { if (document.visibilityState === 'hidden') { saveProgressNow(state); rememberReadingSession(state); } };
+  const onUnload = () => { saveProgressNow(state); rememberReadingSession(state); };
   document.addEventListener('visibilitychange', onVis);
   window.addEventListener('beforeunload', onUnload);
   state.cleanup.push(() => document.removeEventListener('visibilitychange', onVis));
@@ -1475,7 +1514,9 @@ function openDock(state) {
 }
 
 function closeTTS(state, { hideDock = true } = {}) {
+  state.resumePending = false;
   state.engine?.stop();
+  rememberReadingSession(state);
   clearTTSHighlight(state);
   state.ttsPage = null;
   state.ttsAdvancing = false;
@@ -1515,8 +1556,10 @@ async function toggleListen(state) {
     return;
   }
   const st = state.engine?.state;
-  if (st === 'playing' || st === 'loading') state.engine.pause();
-  else state.engine.play();
+  if (st === 'playing' || st === 'loading') {
+    state.resumePending = false;
+    state.engine.pause();
+  } else state.engine.play();
 }
 
 function applyBookVoice(state) {
@@ -1560,12 +1603,26 @@ async function startTTS(state, { autoplay = true, start = null, startFraction = 
     return;
   }
   if (state.mode === 'pdf') {
-    return startPdfTTS(state, { autoplay, page: state.page || 1, start, startFraction, paused });
+    const point = start == null && state.resumePoint && (!state.resumePoint.page || state.resumePoint.page === (state.page || 1))
+      ? state.resumePoint
+      : null;
+    return startPdfTTS(state, {
+      autoplay,
+      paused,
+      page: point?.page || state.page || 1,
+      start: point?.sentenceIndex ?? start,
+      startFraction: point?.fraction ?? startFraction,
+    });
   }
   buildReflowTimeline(state);
   const sentences = buildChapterSentences(state);
   if (!sentences.length) return false;
   let index = start;
+  let fraction = startFraction;
+  if (index == null && state.resumePoint && state.resumePoint.chapterIndex === state.chapterIndex) {
+    index = state.resumePoint.sentenceIndex;
+    if (fraction == null) fraction = state.resumePoint.fraction;
+  }
   if (index == null) index = firstVisibleSentence(state, sentences);
   openDock(state);
   state.ttsPage = null;
@@ -1573,8 +1630,9 @@ async function startTTS(state, { autoplay = true, start = null, startFraction = 
     autoplay,
     paused,
     start: clamp(index || 0, 0, sentences.length - 1),
-    startFraction,
+    startFraction: fraction,
   });
+  state.resumePoint = null;
   updateMediaSession(state);
   return true;
 }
@@ -1597,14 +1655,21 @@ async function startPdfTTS(state, { autoplay = true, page = null, start = null, 
     setTimeout(() => { state.ttsAdvancing = false; }, 250);
   }
   sentences = sentences.map(s => ({ ...s, page: p }));
+  let startIndex = start;
+  let fraction = startFraction;
+  if (startIndex == null && state.resumePoint && (!state.resumePoint.page || state.resumePoint.page === p)) {
+    startIndex = state.resumePoint.sentenceIndex;
+    if (fraction == null) fraction = state.resumePoint.fraction;
+  }
   openDock(state);
   state.ttsPage = p;
   state.engine.load(sentences, {
     autoplay,
     paused,
-    start: clamp(start || 0, 0, sentences.length - 1),
-    startFraction,
+    start: clamp(startIndex || 0, 0, sentences.length - 1),
+    startFraction: fraction,
   });
+  state.resumePoint = null;
   updateMediaSession(state);
   return true;
 }
@@ -1630,6 +1695,7 @@ function onTTSSentence(state, sentence, index) {
     const chapter = sentence.meta?.chapterIndex ?? state.chapterIndex;
     state.timelineEntryIndex = state.bookTimeline?.byChapter?.[chapter]?.[sentence.meta?.localIndex ?? index] ?? null;
   }
+  state.lastSessionSave = Date.now();
   rememberReadingSession(state);
   prefetchNextChapter(state, index);
   if (!getPrefs().tts.highlight) return;
@@ -1753,7 +1819,9 @@ function updateTTSState(state, st) {
   refs.ttsBtn.querySelector('span').textContent = playing ? 'Listening' : 'Listen';
   refs.ttsEq.classList.toggle('is-live', st === 'playing' || transitioning);
   if (st === 'playing') refs.ttsEq.classList.add('is-live');
+  if (st === 'paused') rememberReadingSession(state);
   if (st === 'playing' || st === 'loading') {
+    state.resumePending = false;
     hideResumeBanner();
     if (state.resumeBannerTimer) { clearTimeout(state.resumeBannerTimer); state.resumeBannerTimer = null; }
   } else if (st === 'idle' && state.engine?._wantPlaying && state.engine?.sentences?.length) {
@@ -1893,8 +1961,10 @@ function handleDockAction(state, action) {
   if (action === 'toggle') {
     state.engine?._primeAudio?.();
     const st = state.engine.state;
-    if (st === 'playing' || st === 'loading') state.engine.pause();
-    else state.engine.play();
+    if (st === 'playing' || st === 'loading') {
+      state.resumePending = false;
+      state.engine.pause();
+    } else state.engine.play();
     return;
   }
   if (action === 'prev') { state.engine.prev(); return; }
@@ -2021,6 +2091,10 @@ async function seekReaderTimeline(state, seconds) {
 function updateTTSTimeline(state) {
   if (!refs?.ttsSeek) return;
   if (state?.ttsSeeking) return;
+  if (state?.engine?.state === 'playing' && Date.now() - (state.lastSessionSave || 0) > 2000) {
+    state.lastSessionSave = Date.now();
+    rememberReadingSession(state);
+  }
   if (state?.mode === 'reflow' && state.book && !state.bookTimeline) buildReflowTimeline(state);
   const progress = readerTimelineProgress(state);
   if (!progress || !Number.isFinite(progress.duration) || progress.duration <= 0) {
@@ -2048,7 +2122,10 @@ function updateMediaSession(state) {
       album: state.record.title || 'Alya’s Reader',
     });
     navigator.mediaSession.setActionHandler('play', () => state.engine.play());
-    navigator.mediaSession.setActionHandler('pause', () => state.engine.pause());
+    navigator.mediaSession.setActionHandler('pause', () => {
+      state.resumePending = false;
+      state.engine.pause();
+    });
     navigator.mediaSession.setActionHandler('previoustrack', () => state.engine.prev());
     navigator.mediaSession.setActionHandler('nexttrack', () => state.engine.next());
     navigator.mediaSession.setActionHandler('stop', () => state.engine.pause());

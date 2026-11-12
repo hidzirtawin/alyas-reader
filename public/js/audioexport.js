@@ -10,7 +10,7 @@ import { prepareAudiobook, renderSentenceWav, Mp3StreamEncoder, safeName, create
 import { piperVoiceById, piperSpeakerName, onPiperProgress, piperProgressLabel } from './tts.js';
 import { modal, confirmDialog, toast } from './ui.js';
 import {
-  downloadBlob, formatBytes, countWords, detectSentenceSegments,
+  downloadBlob, formatBytes, countWords, detectSentenceSegments, splitLongText,
 } from './util.js';
 
 const OPFS_DIR = 'audio-exports';
@@ -154,13 +154,22 @@ function chapterChunks(sentences, maxChars = 800) {
   for (const sentence of sentences) {
     const clean = String(sentence || '').trim();
     if (!clean) continue;
-    if (text && text.length + clean.length + 1 > maxChars) {
-      chunks.push({ text, count });
-      text = '';
-      count = 0;
+    const fragments = splitLongText(clean, maxChars);
+    for (let i = 0; i < fragments.length; i++) {
+      const fragment = fragments[i];
+      if (text && text.length + fragment.length + 1 > maxChars) {
+        chunks.push({ text, count });
+        text = '';
+        count = 0;
+      }
+      text += (text ? ' ' : '') + fragment;
+      if (i === fragments.length - 1) count++;
+      if (text.length >= maxChars) {
+        chunks.push({ text, count });
+        text = '';
+        count = 0;
+      }
     }
-    text += (text ? ' ' : '') + clean;
-    count++;
   }
   if (text) chunks.push({ text, count });
   return chunks;

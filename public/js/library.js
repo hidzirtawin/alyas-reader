@@ -278,7 +278,7 @@ function openCardMenu(app, book, anchor) {
     { sep: true },
     { label: 'Book details', icon: 'info', onSelect: () => openBookDetails(app, book) },
     { label: 'Collections…', icon: 'folder', onSelect: () => openCollections(app, book) },
-    ...(!['cbz', 'cbr'].includes(book.format) ? [{ label: 'Make audiobook…', icon: 'loudhailer', onSelect: () => app.openBook(book.id, { audiobook: true }) }] : []),
+    ...(!['cbz', 'cbr'].includes(book.format) ? [{ label: 'Make audiobook chapters…', icon: 'loudhailer', onSelect: () => app.openBook(book.id, { audiobook: true }) }] : []),
     { label: 'Download audio', icon: 'download', onSelect: () => downloadBookAudio(book) },
     { sep: true },
     {

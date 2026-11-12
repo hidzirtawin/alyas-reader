@@ -3,7 +3,7 @@
 
 import { piperGenerate, piperVoiceById, piperSpeakerName, cleanForSpeech } from './tts.js';
 import { getPrefs } from './prefs.js';
-import { detectSentenceSegments } from './util.js';
+import { detectSentenceSegments, splitLongText } from './util.js';
 
 function stripHtml(html = '') {
   const holder = document.createElement('div');
@@ -18,6 +18,30 @@ function sentenceList(text) {
     .filter(line => line.length > 1)
     .filter(line => /[\p{L}\p{N}]/u.test(line))
     .filter(line => !/^\s*(?:\d+(?:\.\d+)*|[ivxlcdm]+)[.)]?\s*$/i.test(line));
+}
+
+function sentenceBatches(sentences, maxChars = 800) {
+  const batches = [];
+  let text = '';
+  let sentencesInBatch = 0;
+  const flush = () => {
+    if (!text) return;
+    batches.push({ text, sentences: sentencesInBatch });
+    text = '';
+    sentencesInBatch = 0;
+  };
+  for (const sentence of sentences) {
+    const chunks = splitLongText(sentence, maxChars);
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      if (text && text.length + chunk.length + 1 > maxChars) flush();
+      text += `${text ? ' ' : ''}${chunk}`;
+      if (i === chunks.length - 1) sentencesInBatch++;
+      if (text.length >= maxChars) flush();
+    }
+  }
+  flush();
+  return batches;
 }
 
 export function safeName(name, fallback = 'chapter') {
@@ -76,13 +100,6 @@ export class Mp3StreamEncoder {
     if (end.length) this.chunks.push(new Uint8Array(end));
     return new Blob(this.chunks, { type: 'audio/mpeg' });
   }
-}
-
-function encodeMp3(parts, fmt, bitrate = 128) {
-  if (!window.lamejs?.Mp3Encoder) return null;
-  const encoder = new Mp3StreamEncoder(fmt, bitrate);
-  for (const part of parts) encoder.push(part);
-  return encoder.finish();
 }
 
 function joinWav(parts, fmt) {
@@ -168,14 +185,14 @@ export async function createAudiobook(state, {
   scope = 'book', format = 'mp3', voiceId = null, speaker = null, onProgress = () => {}, token = { cancelled: false },
 } = {}) {
   const tts = getPrefs().tts;
-  if (tts.provider !== 'piper') throw new Error('Choose a Piper voice before creating an audiobook.');
+  if (tts.provider !== 'piper') throw new Error('Choose a fast Piper voice before creating an audiobook.');
   const voice = piperVoiceById(voiceId || tts.piperVoice);
+  if (!voice) throw new Error('Choose an available Piper voice before creating an audiobook.');
   const speakerId = Number.isFinite(Number(speaker))
     ? Math.max(0, Math.min(Number(speaker), Math.max(0, voice.num_speakers - 1)))
     : (Number(tts.piperSpeaker) || 0);
   const prepared = await prepareAudiobook(state, scope);
-  const totalSentences = prepared.reduce((sum, c) => sum + c.sentences.length, 0);
-
+  const totalSentences = prepared.reduce((sum, chapter) => sum + chapter.sentences.length, 0);
   const single = format === 'mp3';
   const mp3Available = Boolean(window.lamejs?.Mp3Encoder);
   const JSZipCtor = window.JSZip;
@@ -184,44 +201,53 @@ export async function createAudiobook(state, {
   const entries = [];
   const singleParts = [];
   let singleEncoder = null;
-  let singlePcmBytes = 0;
   let singleFmt = null;
+  let singlePcmBytes = 0;
   let done = 0;
 
   for (let ci = 0; ci < prepared.length; ci++) {
     const chapter = prepared[ci];
-    const parts = single ? null : [];
+    const batches = sentenceBatches(chapter.sentences);
     let fmt = null;
-    for (const sentence of chapter.sentences) {
+    let chapterEncoder = null;
+    const chapterParts = [];
+    let chapterSeconds = 0;
+    for (const batch of batches) {
       if (token.cancelled) throw new Error('Audiobook creation cancelled.');
-      const blob = await piperGenerate(sentence, voice.id, speakerId);
-      const wav = await readWav(blob);
-      fmt = fmt || wav.fmt;
+      const wav = await readWav(await piperGenerate(batch.text, voice.id, speakerId));
+      fmt ||= wav.fmt;
+      chapterSeconds += wav.data.length / Math.max(1, fmt.sampleRate * Math.max(1, Math.round(fmt.channels * fmt.bits / 8)));
       if (single) {
-        singleFmt ||= wav.fmt;
+        singleFmt ||= fmt;
         singlePcmBytes += wav.data.length;
-      }
-      if (single && mp3Available) {
-        singleEncoder ||= new Mp3StreamEncoder(fmt);
-        singleEncoder.push(wav.data);
-      } else if (single) {
-        singleParts.push(wav.data);
-      } else {
-        parts.push(wav.data);
-      }
-      done++;
-      onProgress({ phase: 'generating', percent: Math.round((done / totalSentences) * 90), chapter: ci + 1, chapters: prepared.length, sentence: done, sentences: totalSentences });
+        if (mp3Available) {
+          singleEncoder ||= new Mp3StreamEncoder(fmt);
+          singleEncoder.push(wav.data);
+        } else singleParts.push(wav.data);
+      } else if (mp3Available) {
+        chapterEncoder ||= new Mp3StreamEncoder(fmt);
+        chapterEncoder.push(wav.data);
+      } else chapterParts.push(wav.data);
+
+      done += batch.sentences;
+      onProgress({
+        phase: 'generating',
+        percent: Math.round((done / totalSentences) * 90),
+        chapter: ci + 1,
+        chapters: prepared.length,
+        sentence: done,
+        sentences: totalSentences,
+      });
     }
-    const blockAlign = Math.max(1, Math.round(fmt.channels * fmt.bits / 8));
+
     if (!single) {
-      const totalBytes = parts.reduce((sum, part) => sum + part.length, 0);
-      const duration = totalBytes / Math.max(1, fmt.sampleRate * blockAlign);
-      const mp3 = encodeMp3(parts, fmt);
-      const number = String(ci + 1).padStart(2, '0');
-      const ext = mp3 ? 'mp3' : 'wav';
-      const file = `${number} - ${safeName(chapter.title)}.${ext}`;
-      zip.file(file, mp3 || joinWav(parts, fmt).blob);
-      entries.push({ title: chapter.title, file, seconds: Math.round(duration) });
+      const blockAlign = Math.max(1, Math.round(fmt.channels * fmt.bits / 8));
+      const file = `${String(ci + 1).padStart(2, '0')} - ${safeName(chapter.title)}.${mp3Available ? 'mp3' : 'wav'}`;
+      const chapterBlob = mp3Available
+        ? chapterEncoder.finish()
+        : joinWav(chapterParts, fmt).blob;
+      zip.file(file, chapterBlob);
+      entries.push({ title: chapter.title, file, seconds: Math.round(chapterSeconds) });
     }
     onProgress({ phase: 'chapter', percent: Math.round(((ci + 1) / prepared.length) * 92), chapter: ci + 1, chapters: prepared.length });
   }
@@ -232,18 +258,11 @@ export async function createAudiobook(state, {
 
   if (single) {
     onProgress({ phase: 'encoding', percent: 94 });
-    let blob;
-    let ext;
-    const outFmt = singleFmt || fmt;
-    const outBlock = Math.max(1, Math.round(outFmt.channels * outFmt.bits / 8));
-    const seconds = singlePcmBytes / Math.max(1, outFmt.sampleRate * outBlock);
-    if (mp3Available) {
-      blob = singleEncoder.finish();
-      ext = 'mp3';
-    } else {
-      blob = joinWav(singleParts, outFmt).blob;
-      ext = 'wav';
-    }
+    const outFmt = singleFmt;
+    const blockAlign = Math.max(1, Math.round(outFmt.channels * outFmt.bits / 8));
+    const duration = singlePcmBytes / Math.max(1, outFmt.sampleRate * blockAlign);
+    const blob = mp3Available ? singleEncoder.finish() : joinWav(singleParts, outFmt).blob;
+    const ext = mp3Available ? 'mp3' : 'wav';
     onProgress({ phase: 'done', percent: 100 });
     return {
       blob,
@@ -252,7 +271,7 @@ export async function createAudiobook(state, {
       sentences: totalSentences,
       voice: voiceLabel,
       format: ext,
-      duration: seconds,
+      duration,
     };
   }
 
@@ -265,7 +284,7 @@ export async function createAudiobook(state, {
     chapters: entries,
   }, null, 2));
   zip.file('playlist.m3u', ['#EXTM3U', ...entries.map(e => `#EXTINF:${e.seconds},${e.title}\n${e.file}`)].join('\n'));
-  zip.file('README.txt', `Audiobook export from Alya’s Reader\nVoice: ${voice.name}\nCreated: ${new Date().toISOString()}\n\n${window.lamejs ? 'MP3 chapter files with an M3U playlist.' : 'WAV chapter files with an M3U playlist.'}\n`);
+  zip.file('README.txt', `Audiobook export from Alya’s Reader\nVoice: ${voice.name}\nCreated: ${new Date().toISOString()}\n\n${mp3Available ? 'MP3 chapter files with an M3U playlist.' : 'WAV chapter files with an M3U playlist.'}\n`);
 
   onProgress({ phase: 'packing', percent: 92 });
   const out = await zip.generateAsync({ type: 'blob', compression: 'STORE' }, meta => {

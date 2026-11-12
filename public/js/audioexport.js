@@ -68,10 +68,10 @@ async function buildExportState(book) {
   };
 }
 
-async function prepareExport(book) {
-  const built = await buildExportState(book);
+async function prepareExport(book, scope = 'book', sourceState = null) {
+  const built = sourceState ? { temporary: false, state: sourceState } : await buildExportState(book);
   try {
-    const chapters = await prepareAudiobook(built.state, 'book');
+    const chapters = await prepareAudiobook(built.state, scope);
     const totalSentences = chapters.reduce((sum, chapter) => sum + chapter.sentences.length, 0);
     const words = chapters.reduce((sum, chapter) => (
       sum + chapter.sentences.reduce((n, sentence) => n + countWords(sentence), 0)
@@ -91,10 +91,10 @@ function disposeBuilt(built) {
 }
 
 function chooseBitrate(seconds) {
-  if (seconds > 8 * 3600) return 48;
-  if (seconds > 3 * 3600) return 64;
-  if (seconds > 60 * 60) return 96;
-  return 128;
+  if (seconds > 8 * 3600) return 32;
+  if (seconds > 3 * 3600) return 48;
+  if (seconds > 60 * 60) return 64;
+  return 96;
 }
 
 function voiceLabel(voiceId, speaker) {
@@ -103,19 +103,20 @@ function voiceLabel(voiceId, speaker) {
   return `${voice.name}${voice.num_speakers > 1 ? ` · ${piperSpeakerName(voice, speaker)}` : ''}`;
 }
 
-async function createJob(book, chapters, totalSentences, seconds) {
+async function createJob(book, chapters, totalSentences, seconds, { scope = 'book', voiceId = null, speaker = null } = {}) {
   const tts = getPrefs().tts;
-  const voiceId = tts.piperVoice;
+  voiceId = voiceId || tts.piperVoice;
   if (!piperVoiceById(voiceId)) throw new Error('Choose an available Piper voice before downloading audio.');
-  const speaker = Number(tts.piperSpeaker) || 0;
+  speaker = Number.isFinite(Number(speaker)) ? Number(speaker) : (Number(tts.piperSpeaker) || 0);
   const bitrate = chooseBitrate(seconds);
   const id = `audio-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const job = {
     id,
     bookId: book.id,
+    scope,
     title: book.title || 'Audiobook',
     author: book.author || '',
-    filename: `${safeName(book.title || 'audiobook', 'audiobook')}.mp3`,
+    filename: `${safeName(book.title || 'audiobook', 'audiobook')}${scope === 'chapter' && chapters[0]?.title ? ` - ${safeName(chapters[0].title)}` : ''}.mp3`,
     voice: voiceLabel(voiceId, speaker),
     voiceId,
     speaker,
@@ -146,7 +147,7 @@ async function removeJob(job) {
   } catch {}
 }
 
-function chapterChunks(sentences, maxChars = 500) {
+function chapterChunks(sentences, maxChars = 800) {
   const chunks = [];
   let text = '';
   let count = 0;
@@ -180,9 +181,7 @@ async function waitForNarration(token, onProgress, info) {
 
 async function runJob(job, chapters, { onProgress = () => {}, token = { cancelled: false } } = {}) {
   const dir = await jobsDir(true);
-  let jobDir;
-  try { jobDir = await dir.getDirectoryHandle(job.id, { create: false }); }
-  catch { jobDir = await dir.getDirectoryHandle(job.id, { create: true }); }
+  const finalHandle = await dir.getFileHandle(`${job.id}.mp3`, { create: true });
 
   job.attempts = (job.attempts || 0) + 1;
   job.status = 'running';
@@ -190,19 +189,27 @@ async function runJob(job, chapters, { onProgress = () => {}, token = { cancelle
   job.updatedAt = Date.now();
   await db.putAudioExport(job);
 
+  // If a reload happened during append, trim the output back to its last
+  // committed size before regenerating that chapter.
+  if (job.pendingAppend) {
+    const repair = await finalHandle.createWritable({ keepExistingData: true });
+    await repair.truncate(job.pendingAppend.offset);
+    await repair.close();
+    job.pendingAppend = null;
+    await db.putAudioExport(job);
+  }
+
   let done = job.doneSentences || 0;
   let duration = job.durationSeconds || 0;
 
   try {
     for (let ci = job.chapterIndex; ci < chapters.length; ci++) {
       const chapter = chapters[ci];
-      // Batch sentences into larger synthesis calls and feed one encoder
-      // per chapter. This cuts the per-call Piper and MP3 setup overhead.
-      const chunks = chapterChunks(chapter.sentences);
+      const batches = chapterChunks(chapter.sentences);
       let encoder = null;
       let chapterSeconds = 0;
       let chapterDone = 0;
-      for (const chunk of chunks) {
+      for (const chunk of batches) {
         if (token.cancelled) {
           const err = new Error('Audio export cancelled.');
           err.cancelled = true;
@@ -237,18 +244,24 @@ async function runJob(job, chapters, { onProgress = () => {}, token = { cancelle
           elapsed: duration + chapterSeconds,
         });
       }
-      const chapterBlob = encoder ? encoder.finish() : new Blob([], { type: 'audio/mpeg' });
-      const chapterBytes = new Uint8Array(await chapterBlob.arrayBuffer());
-      const handle = await jobDir.getFileHandle(chapterFile(ci, job.attempts), { create: true });
-      const writable = await handle.createWritable();
-      await writable.write(chapterBytes);
-      await writable.close();
+
+      if (!encoder) throw new Error('A chapter contained no encodable audio.');
+      const chapterMp3 = encoder.finish();
+      const existingFile = await finalHandle.getFile();
+      const offset = existingFile.size;
+      job.pendingAppend = { chapterIndex: ci, offset };
+      await db.putAudioExport(job);
+      const output = await finalHandle.createWritable({ keepExistingData: true });
+      await output.seek(offset);
+      await output.write(new Uint8Array(await chapterMp3.arrayBuffer()));
+      await output.close();
 
       done += chapter.sentences.length;
       duration += chapterSeconds;
       job.chapterIndex = ci + 1;
       job.doneSentences = done;
       job.durationSeconds = duration;
+      job.pendingAppend = null;
       job.updatedAt = Date.now();
       await db.putAudioExport(job);
       onProgress({
@@ -263,50 +276,13 @@ async function runJob(job, chapters, { onProgress = () => {}, token = { cancelle
     }
 
     onProgress({ phase: 'encoding', percent: 96, elapsed: duration });
-    const chapterFiles = new Map();
-    for await (const [name] of jobDir.entries()) {
-      const match = /^chapter-(\d+)-a(\d+)\.mp3$/.exec(name);
-      if (!match) continue;
-      const index = Number(match[1]) - 1;
-      const attempt = Number(match[2]);
-      const current = chapterFiles.get(index);
-      if (!current || attempt > current.attempt) chapterFiles.set(index, { name, attempt });
-    }
-    for (let ci = 0; ci < chapters.length; ci++) {
-      if (!chapterFiles.has(ci)) {
-        job.chapterIndex = 0;
-        job.doneSentences = 0;
-        job.durationSeconds = 0;
-        job.updatedAt = Date.now();
-        await db.putAudioExport(job);
-        throw new Error('The saved audio chapters were incomplete; the export will restart.');
-      }
-    }
-
-    const finalHandle = await dir.getFileHandle(`${job.id}.mp3`, { create: true });
-    const out = await finalHandle.createWritable();
-    try {
-      for (let ci = 0; ci < chapters.length; ci++) {
-        const handle = await jobDir.getFileHandle(chapterFiles.get(ci).name, { create: false });
-        const file = await handle.getFile();
-        const reader = file.stream().getReader();
-        while (true) {
-          const { done: finished, value } = await reader.read();
-          if (finished) break;
-          await out.write(value);
-        }
-      }
-    } finally {
-      try { await out.close(); } catch {}
-    }
-    try { await dir.removeEntry(job.id, { recursive: true }); } catch {}
-
     const file = await finalHandle.getFile();
     job.bytes = file.size;
     job.status = 'complete';
     job.updatedAt = Date.now();
     job.durationSeconds = duration;
     job.doneSentences = done;
+    job.pendingAppend = null;
     await db.putAudioExport(job);
     onProgress({ phase: 'done', percent: 100, elapsed: duration });
     return { job, file };
@@ -422,7 +398,7 @@ async function resumeWithModal(job) {
     toast('The book for this audio export is no longer in the library.', 'err');
     return;
   }
-  const prepared = await prepareExport(book);
+  const prepared = await prepareExport(book, job.scope || 'book');
   try {
     if (prepared.totalSentences !== job.totalSentences) {
       job.chapterIndex = 0;
@@ -439,7 +415,7 @@ async function resumeWithModal(job) {
 }
 
 async function legacyDownload(book) {
-  const prepared = await prepareExport(book);
+  const prepared = await prepareExport(book, job.scope || 'book');
   const estimatedMb = Math.round((prepared.seconds * 128 * 1000) / 8 / (1024 * 1024));
   if (estimatedMb > 350) {
     disposeBuilt(prepared);
@@ -493,16 +469,19 @@ async function legacyDownload(book) {
   }
 }
 
-export async function downloadBookAudio(book) {
+export async function downloadBookAudio(book, { scope = 'book', state = null, voiceId = null, speaker = null } = {}) {
   if (!book) return;
   if (['cbz', 'cbr'].includes(book.format)) {
     toast('Comic pages are images, so there is no text to turn into an audiobook.', 'info');
     return;
   }
   if (getPrefs().tts.provider !== 'piper') {
-    toast('Choose a Piper voice in Settings before downloading audio.', 'info');
+    toast('Choose a fast Piper voice in Settings before downloading audio.', 'info');
     return;
   }
+  const tts = getPrefs().tts;
+  const chosenVoice = voiceId || tts.piperVoice;
+  const chosenSpeaker = Number.isFinite(Number(speaker)) ? Number(speaker) : (Number(tts.piperSpeaker) || 0);
   if (!opfsAvailable()) {
     await legacyDownload(book);
     return;
@@ -512,8 +491,12 @@ export async function downloadBookAudio(book) {
 
   try {
     const jobs = await db.listAudioExports();
-    const existing = jobs.find(job => job.bookId === book.id && job.status === 'complete')
-      || jobs.find(job => job.bookId === book.id && job.status === 'running' && (job.attempts || 0) < MAX_ATTEMPTS);
+    const matches = job => job.bookId === book.id
+      && (job.scope || 'book') === scope
+      && job.voiceId === chosenVoice
+      && Number(job.speaker || 0) === chosenSpeaker;
+    const existing = jobs.find(job => matches(job) && job.status === 'complete')
+      || jobs.find(job => matches(job) && job.status === 'running' && (job.attempts || 0) < MAX_ATTEMPTS);
     if (existing?.status === 'complete') {
       try {
         const dir = await jobsDir(false);
@@ -528,10 +511,10 @@ export async function downloadBookAudio(book) {
       await resumeWithModal(existing);
       return;
     }
-    const stale = jobs.filter(job => job.bookId === book.id);
+    const stale = jobs.filter(job => matches(job));
     for (const job of stale) await removeJob(job);
 
-    const prepared = await prepareExport(book);
+    const prepared = await prepareExport(book, scope, state);
     const bitrate = chooseBitrate(prepared.seconds);
     const estimatedMb = Math.round((prepared.seconds * bitrate * 1000) / 8 / (1024 * 1024));
     let proceed = true;
@@ -549,7 +532,7 @@ export async function downloadBookAudio(book) {
       return;
     }
 
-    const job = await createJob(book, prepared.chapters, prepared.totalSentences, prepared.seconds);
+    const job = await createJob(book, prepared.chapters, prepared.totalSentences, prepared.seconds, { scope, voiceId, speaker });
     try {
       await runWithModal(job, prepared.chapters);
     } finally {
@@ -593,7 +576,7 @@ export async function resumeAudioExports() {
       }
       toast(`Resuming interrupted MP3 export · ${job.title}`, 'info');
       try {
-        const prepared = await prepareExport(book);
+        const prepared = await prepareExport(book, job.scope || 'book');
         if (prepared.totalSentences !== job.totalSentences) {
           job.chapterIndex = 0;
           job.doneSentences = 0;

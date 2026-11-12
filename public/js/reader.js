@@ -2919,15 +2919,8 @@ function openAudiobookDialog(state) {
           <option value="chapter">${state.mode === 'pdf' ? 'This page' : 'This chapter'} · ${esc(chapterTitle)}</option>
         </select>
       </div>
-      <div class="field" style="margin-top:12px">
-        <label for="audioFile">File</label>
-        <select class="select" id="audioFile">
-          <option value="mp3">Single MP3 file</option>
-          <option value="zip">MP3 chapters · zip with playlist</option>
-        </select>
-      </div>
       <div class="audiobook-estimate" id="audioEstimate">${estimate('book')}</div>
-      <p class="hint">Piper runs on your device. A full book can take hours; you can cancel at any time. Choose one MP3 for the whole export, or a zip of MP3 chapters with a playlist.</p>
+      <p class="hint">This makes a ZIP of chapter MP3s. For one whole-book MP3, use <strong>Download audio</strong> from the book menu.</p>
     </div>`;
 
   const voiceSelect = body.querySelector('#audioVoice');
@@ -2988,8 +2981,8 @@ function openAudiobookDialog(state) {
 
   const foot = document.createElement('div');
   foot.style.flexWrap = 'wrap';
-  foot.innerHTML = `<button class="btn" data-cancel>Cancel</button><button class="btn" data-test-voice type="button">${icon('loudhailer')} Test voice</button><button class="btn btn-primary" data-start-audio>Create audiobook</button>`;
-  const m = modal({ eyebrow: 'Audiobook', title: 'Make an audiobook', body, foot, wide: true, onClose: () => stopPreview() });
+  foot.innerHTML = `<button class="btn" data-cancel>Cancel</button><button class="btn" data-test-voice type="button">${icon('loudhailer')} Test voice</button><button class="btn btn-primary" data-start-audio>Create chapter ZIP</button>`;
+  const m = modal({ eyebrow: 'Audiobook chapters', title: 'Make audiobook chapters', body, foot, wide: true, onClose: () => stopPreview() });
 
   const testBtn = foot.querySelector('[data-test-voice]');
   testBtn.addEventListener('click', async () => {
@@ -3022,14 +3015,12 @@ function openAudiobookDialog(state) {
   });
 
   const scopeSelect = body.querySelector('#audioScope');
-  const fileSelect = body.querySelector('#audioFile');
   scopeSelect.addEventListener('change', () => {
     body.querySelector('#audioEstimate').textContent = estimate(scopeSelect.value);
   });
   foot.querySelector('[data-cancel]').onclick = () => m.close('cancel');
   foot.querySelector('[data-start-audio]').onclick = () => {
     const scope = scopeSelect.value;
-    const format = fileSelect.value;
     const voiceId = audioVoiceId;
     const speaker = audioSpeaker;
     m.close('start');
@@ -3057,7 +3048,7 @@ function openAudiobookDialog(state) {
     };
     createAudiobook(state, {
       scope,
-      format,
+      format: 'zip',
       voiceId,
       speaker,
       token,
@@ -3066,11 +3057,9 @@ function openAudiobookDialog(state) {
         if (p.phase === 'generating' || p.phase === 'chapter' || p.phase === 'encoding' || p.phase === 'packing') generationStarted = true;
         if (pct) pct.textContent = `${p.percent || 0}%`;
         if (status) {
-          status.textContent = p.phase === 'encoding'
-            ? (format === 'mp3' ? 'Finishing the MP3 file…' : 'Finishing the audio file…')
-            : p.phase === 'packing'
-              ? 'Packing MP3 chapters into a zip…'
-              : `Chapter ${p.chapter || 1} of ${p.chapters || 1}${p.sentences ? ` · sentence ${p.sentence} of ${p.sentences}` : ''}`;
+          status.textContent = p.phase === 'packing'
+            ? 'Packing MP3 chapters into a zip…'
+            : `Chapter ${p.chapter || 1} of ${p.chapters || 1}${p.sentences ? ` · sentence ${p.sentence} of ${p.sentences}` : ''}`;
         }
       },
     }).then(result => {
@@ -3186,7 +3175,7 @@ function openMoreMenu(state) {
   contextMenu(rect.right - 8, rect.bottom + 8, [
     { label: 'Go to page…', icon: 'list', onSelect: () => openGoTo(state) },
     ...(state.mode !== 'comic' ? [{ label: 'Search in book…', icon: 'search', onSelect: () => openBookSearch(state) }] : []),
-    ...(state.mode !== 'comic' ? [{ label: 'Make audiobook…', icon: 'loudhailer', onSelect: () => openAudiobookDialog(state) }] : []),
+    ...(state.mode !== 'comic' ? [{ label: 'Make audiobook chapters…', icon: 'loudhailer', onSelect: () => openAudiobookDialog(state) }] : []),
     {
       label: getSleepTimer() ? `Sleep timer · ${formatSleepRemaining(getSleepTimer().remainingMs)}` : 'Sleep timer…',
       icon: 'moon',

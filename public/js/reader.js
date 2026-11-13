@@ -22,7 +22,7 @@ import { createAudiobook, audiobookChapters } from './audiobook.js';
 import { baseLanguage, languageName, languageMatches } from './language.js';
 import {
   $, esc, icon, clamp, debounce, uid, normalizedText,
-  detectSentenceSegments, filterNarrationJunk, isNarrationJunk,
+  detectSentenceSegments, filterNarrationJunk, isNarrationJunk, splitNarrationBlocks,
   formatTimeLeft, copyText, isEditable, downloadBlob, formatBytes, rafThrottle,
 } from './util.js';
 
@@ -837,14 +837,31 @@ function buildTextMap(root) {
   const nodes = [];
   let text = '';
   let node;
+  let previousBlock = null;
   while ((node = walker.nextNode())) {
     const value = node.nodeValue;
-    if (text && /\S$/.test(text) && /^\S/.test(value)) text += ' ';
+    const block = blockOf(node, root);
+    // A new block starts a new line, so paragraph-final junk such as a page
+    // number stays on its own line instead of merging with the next sentence.
+    if (previousBlock && block !== previousBlock) text += '\n';
+    else if (text && /\S$/.test(text) && /^\S/.test(value)) text += ' ';
+    previousBlock = block;
     const start = text.length;
     text += value;
     nodes.push({ node, start, end: text.length });
   }
   return { text, nodes };
+}
+
+const BLOCK_TAGS = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|CAPTION|DD|DIV|DL|DT|FIGCAPTION|FIGURE|FOOTER|H[1-6]|HEADER|HR|LI|MAIN|NAV|OL|P|PRE|SECTION|TABLE|TD|TH|TR|UL)$/;
+
+function blockOf(node, root) {
+  let el = node.parentElement;
+  while (el && el !== root) {
+    if (BLOCK_TAGS.test(el.tagName)) return el;
+    el = el.parentElement;
+  }
+  return root;
 }
 
 function pointForOffset(map, offset) {
@@ -916,19 +933,21 @@ function wordTokens(text) {
 
 function sentenceRecordsFromMap(map, chapterIndex, { includeRanges = true } = {}) {
   const out = [];
-  for (const seg of detectSentenceSegments(map.text)) {
-    const raw = seg.text;
-    const lead = raw.length - raw.trimStart().length;
-    const text = raw.trim();
-    if (!text || text.length < 2 || isNarrationJunk(text)) continue;
-    const start = seg.start + lead;
-    const tokens = wordTokens(text);
-    const wordRanges = includeRanges
-      ? tokens.map(word => ({ ...word, range: rangeFromOffsets(map, start + word.start, start + word.end) })).filter(word => word.range)
-      : tokens;
-    const range = rangeFromOffsets(map, start, start + text.length);
-    if (range && wordRanges.length) {
-      out.push({ text, range, wordRanges, meta: { chapterIndex, localIndex: out.length } });
+  for (const block of splitNarrationBlocks(map.text)) {
+    for (const seg of detectSentenceSegments(block.text)) {
+      const raw = seg.text;
+      const lead = raw.length - raw.trimStart().length;
+      const text = raw.trim();
+      if (!text || text.length < 2 || isNarrationJunk(text)) continue;
+      const start = block.start + seg.start + lead;
+      const tokens = wordTokens(text);
+      const wordRanges = includeRanges
+        ? tokens.map(word => ({ ...word, range: rangeFromOffsets(map, start + word.start, start + word.end) })).filter(word => word.range)
+        : tokens;
+      const range = rangeFromOffsets(map, start, start + text.length);
+      if (range && wordRanges.length) {
+        out.push({ text, range, wordRanges, meta: { chapterIndex, localIndex: out.length } });
+      }
     }
   }
   return out;

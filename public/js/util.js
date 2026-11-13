@@ -246,6 +246,22 @@ export function splitLongText(text, maxLen) {
 /* Page furniture — folios, running heads, bare links — reads badly aloud and
    wastes speech generation. These checks are deliberately narrow: a line is
    only dropped when it cannot be a sentence, so "No." or "Chapter 12" survive. */
+/* Split narration text into paragraph-sized blocks. Sentences are detected
+   inside a block, never across one, so a page number on its own line cannot
+   attach itself to the paragraph that follows it. */
+export function splitNarrationBlocks(text = '') {
+  const value = String(text);
+  const blocks = [];
+  let start = 0;
+  for (let i = 0; i <= value.length; i++) {
+    if (i !== value.length && value[i] !== '\n') continue;
+    const slice = value.slice(start, i);
+    if (slice.trim()) blocks.push({ text: slice, start });
+    start = i + 1;
+  }
+  return blocks;
+}
+
 export function isNarrationJunk(text = '') {
   const line = String(text).trim();
   if (!line) return true;

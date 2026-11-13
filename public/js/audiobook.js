@@ -3,18 +3,35 @@
 
 import { piperGenerate, piperVoiceById, piperSpeakerName, cleanForSpeech } from './tts.js';
 import { getPrefs } from './prefs.js';
-import { detectSentenceSegments, splitLongText, filterNarrationJunk } from './util.js';
+import { detectSentenceSegments, splitLongText, isNarrationJunk, splitNarrationBlocks } from './util.js';
 
 function stripHtml(html = '') {
   const holder = document.createElement('div');
   holder.innerHTML = html;
-  holder.querySelectorAll('p,div,li,h1,h2,h3,h4,h5,h6,blockquote').forEach(el => el.append(document.createTextNode(' ')));
-  return holder.textContent.replace(/\s+/g, ' ').trim();
+  // Keep block boundaries as line breaks: a page number or running head on its
+  // own line must not be glued onto the paragraph that follows it.
+  holder.querySelectorAll('p,div,li,h1,h2,h3,h4,h5,h6,blockquote,tr,figcaption,section,header,footer')
+    .forEach(el => el.append(document.createTextNode('\n')));
+  return holder.textContent
+    .replace(/\r/g, '')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ ?\n ?/g, '\n')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
 }
 
 function sentenceList(text) {
-  return filterNarrationJunk(detectSentenceSegments(text).map(seg => cleanForSpeech(seg.text.trim())))
-    .filter(line => line.length > 1);
+  const out = [];
+  for (const block of splitNarrationBlocks(text)) {
+    for (const seg of detectSentenceSegments(block.text)) {
+      // Check the raw sentence: cleaning turns a bare URL into "a link".
+      const raw = seg.text.trim();
+      if (!raw || isNarrationJunk(raw)) continue;
+      const line = cleanForSpeech(raw);
+      if (line.length > 1) out.push(line);
+    }
+  }
+  return out;
 }
 
 function sentenceBatches(sentences, maxChars = 800) {

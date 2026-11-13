@@ -10,7 +10,7 @@ import { prepareAudiobook, renderSentenceWav, Mp3StreamEncoder, safeName, create
 import { piperVoiceById, piperSpeakerName, onPiperProgress, piperProgressLabel } from './tts.js';
 import { modal, confirmDialog, toast } from './ui.js';
 import {
-  downloadBlob, formatBytes, countWords, detectSentenceSegments, splitLongText,
+  downloadBlob, formatBytes, countWords, detectSentenceSegments, splitLongText, filterNarrationJunk,
 } from './util.js';
 
 const OPFS_DIR = 'audio-exports';
@@ -49,9 +49,8 @@ async function buildExportState(book) {
           .join(' ')
           .replace(/\s+/g, ' ')
           .trim();
-        return detectSentenceSegments(text)
-          .map(segment => segment.text.trim())
-          .filter(line => line.length > 1 && /[\p{L}\p{N}]/u.test(line))
+        return filterNarrationJunk(detectSentenceSegments(text).map(segment => segment.text.trim()))
+          .filter(line => line.length > 1)
           .map(line => ({ text: line, page: pageNumber }));
       },
     };

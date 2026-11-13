@@ -243,6 +243,31 @@ export function splitLongText(text, maxLen) {
   return chunks.filter(Boolean);
 }
 
+/* Page furniture — folios, running heads, bare links — reads badly aloud and
+   wastes speech generation. These checks are deliberately narrow: a line is
+   only dropped when it cannot be a sentence, so "No." or "Chapter 12" survive. */
+export function isNarrationJunk(text = '') {
+  const line = String(text).trim();
+  if (!line) return true;
+  if (!/[\p{L}\p{N}]/u.test(line)) return true;
+  if (/^[\s\-–—•·|:.,()[\]{}]*\d{1,4}[\s\-–—•·|:.,()[\]{}]*$/.test(line)) return true;
+  if (/^(?:page|p\.?|pg\.?)\s*\d+(?:\s*(?:of|\/)\s*\d+)?[\s.:]*$/i.test(line)) return true;
+  if (/^\d+\s*(?:of|\/)\s*\d+[\s.:]*$/i.test(line)) return true;
+  // Roman folios such as xii or xiv; a lone "I" is a pronoun, not a page number.
+  if (/^[\s\-–—]*[ivxlcdm]{3,7}[\s\-–—]*$/i.test(line)) return true;
+  if (/^(?:https?:\/\/|www\.)\S+$/i.test(line)) return true;
+  if (/^[\w.+-]+@[\w-]+\.[\w.]+$/.test(line)) return true;
+  if (/^isbn[\s:]*[\d\-x]+$/i.test(line)) return true;
+  return false;
+}
+
+export function filterNarrationJunk(items = []) {
+  return items.filter(item => {
+    const text = typeof item === 'string' ? item : item?.text;
+    return typeof text === 'string' && !isNarrationJunk(text);
+  });
+}
+
 export function detectSentenceSegments(text) {
   const out = [];
   if (window.Intl?.Segmenter) {

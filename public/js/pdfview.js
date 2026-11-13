@@ -1,7 +1,7 @@
 /* PDF reading with pdf.js: lazy page rendering, selectable text,
    page-accurate narration highlighting, outline support. */
 
-import { detectSentenceSegments, normalizedText, rafThrottle } from './util.js';
+import { detectSentenceSegments, isNarrationJunk, normalizedText, rafThrottle } from './util.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs/pdf.worker.min.js';
 
@@ -489,8 +489,7 @@ function buildPageSentences(items) {
     if (!trimmed) continue;
     const start = seg.start + lead;
     const end = start + trimmed.length;
-    if (trimmed.length < 2) continue;
-    if (!/[\p{L}\p{N}]/u.test(trimmed)) continue;
+    if (trimmed.length < 2 || isNarrationJunk(trimmed)) continue;
     const itemIdxs = pieces
       .filter(p => p.end > start && p.start < end)
       .map(p => p.idx);

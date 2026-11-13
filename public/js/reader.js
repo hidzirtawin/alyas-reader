@@ -22,7 +22,8 @@ import { createAudiobook, audiobookChapters } from './audiobook.js';
 import { baseLanguage, languageName, languageMatches } from './language.js';
 import {
   $, esc, icon, clamp, debounce, uid, normalizedText,
-  detectSentenceSegments, formatTimeLeft, copyText, isEditable, downloadBlob, formatBytes, rafThrottle,
+  detectSentenceSegments, filterNarrationJunk, isNarrationJunk,
+  formatTimeLeft, copyText, isEditable, downloadBlob, formatBytes, rafThrottle,
 } from './util.js';
 
 let S = null;
@@ -919,8 +920,7 @@ function sentenceRecordsFromMap(map, chapterIndex, { includeRanges = true } = {}
     const raw = seg.text;
     const lead = raw.length - raw.trimStart().length;
     const text = raw.trim();
-    if (!text || text.length < 2 || !/[\p{L}\p{N}]/u.test(text)) continue;
-    if (/^\s*(?:\d+(?:\.\d+)*|[ivxlcdm]+)[.)]?\s*$/i.test(text)) continue;
+    if (!text || text.length < 2 || isNarrationJunk(text)) continue;
     const start = seg.start + lead;
     const tokens = wordTokens(text);
     const wordRanges = includeRanges
@@ -1762,9 +1762,8 @@ function sentencesFromChapter(chapter) {
   holder.className = 'reading';
   holder.innerHTML = chapter.html;
   const map = buildTextMap(holder);
-  return detectSentenceSegments(map.text)
-    .map(seg => seg.text.trim())
-    .filter(text => text.length >= 2 && /[\p{L}\p{N}]/u.test(text));
+  return filterNarrationJunk(detectSentenceSegments(map.text).map(seg => seg.text.trim()))
+    .filter(text => text.length >= 2);
 }
 
 function prefetchNextChapter(state, index) {

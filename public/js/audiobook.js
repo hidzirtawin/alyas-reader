@@ -3,7 +3,7 @@
 
 import { piperGenerate, piperVoiceById, piperSpeakerName, cleanForSpeech } from './tts.js';
 import { getPrefs } from './prefs.js';
-import { detectSentenceSegments, splitLongText } from './util.js';
+import { detectSentenceSegments, splitLongText, filterNarrationJunk } from './util.js';
 
 function stripHtml(html = '') {
   const holder = document.createElement('div');
@@ -13,11 +13,8 @@ function stripHtml(html = '') {
 }
 
 function sentenceList(text) {
-  return detectSentenceSegments(text)
-    .map(seg => cleanForSpeech(seg.text.trim()))
-    .filter(line => line.length > 1)
-    .filter(line => /[\p{L}\p{N}]/u.test(line))
-    .filter(line => !/^\s*(?:\d+(?:\.\d+)*|[ivxlcdm]+)[.)]?\s*$/i.test(line));
+  return filterNarrationJunk(detectSentenceSegments(text).map(seg => cleanForSpeech(seg.text.trim())))
+    .filter(line => line.length > 1);
 }
 
 function sentenceBatches(sentences, maxChars = 800) {

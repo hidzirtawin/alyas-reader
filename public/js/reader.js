@@ -22,7 +22,7 @@ import { createAudiobook, audiobookChapters } from './audiobook.js';
 import { baseLanguage, languageName, languageMatches } from './language.js';
 import {
   $, esc, icon, clamp, debounce, uid, normalizedText,
-  detectSentenceSegments, filterNarrationJunk, isNarrationJunk, splitNarrationBlocks,
+  detectSentenceSegments, isNarrationJunk, splitNarrationBlocks,
   formatTimeLeft, copyText, isEditable, downloadBlob, formatBytes, rafThrottle,
 } from './util.js';
 
@@ -1781,8 +1781,14 @@ function sentencesFromChapter(chapter) {
   holder.className = 'reading';
   holder.innerHTML = chapter.html;
   const map = buildTextMap(holder);
-  return filterNarrationJunk(detectSentenceSegments(map.text).map(seg => seg.text.trim()))
-    .filter(text => text.length >= 2);
+  const out = [];
+  for (const block of splitNarrationBlocks(map.text)) {
+    for (const seg of detectSentenceSegments(block.text)) {
+      const text = seg.text.trim();
+      if (text.length >= 2 && !isNarrationJunk(text)) out.push(text);
+    }
+  }
+  return out;
 }
 
 function prefetchNextChapter(state, index) {

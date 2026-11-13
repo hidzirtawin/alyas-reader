@@ -5,7 +5,7 @@
 
 import { getPrefs, setTtsPrefs } from './prefs.js';
 import { splitLongText } from './util.js';
-import { getCachedClip, putCachedClip } from './audiocache.js';
+import { getCachedClip, queueClipWrite } from './audiocache.js';
 
 const PREFERRED = [
   'samantha', 'ava', 'serena', 'daniel', 'karen', 'moira', 'tessa', 'alex',
@@ -1664,7 +1664,7 @@ export class SpeechEngine {
         return entry;
       }
       const blob = await piperGenerate(text, voiceId, speaker, { priority: urgent ? 0 : 2, key });
-      putCachedClip(key, blob).catch(() => {});
+      queueClipWrite(key, blob);
       const entry = { url: URL.createObjectURL(blob), blob, key, at: Date.now() };
       this._cache.set(key, entry);
       this._trimCache();

@@ -284,10 +284,21 @@ export function filterNarrationJunk(items = []) {
   });
 }
 
+/* One segmenter for the whole app. Building one per paragraph was measurably
+   slow on a chapter with hundreds of them. */
+let sentenceSegmenter = null;
+function segmenter() {
+  if (sentenceSegmenter !== undefined && sentenceSegmenter !== null) return sentenceSegmenter;
+  sentenceSegmenter = window.Intl?.Segmenter
+    ? new Intl.Segmenter('en', { granularity: 'sentence' })
+    : null;
+  return sentenceSegmenter;
+}
+
 export function detectSentenceSegments(text) {
   const out = [];
-  if (window.Intl?.Segmenter) {
-    const seg = new Intl.Segmenter('en', { granularity: 'sentence' });
+  const seg = segmenter();
+  if (seg) {
     for (const s of seg.segment(text)) out.push({ text: s.segment, start: s.index });
   } else {
     const re = /[^.!?]+[.!?]+(?:["'”’)]+)?\s*|[^.!?]+$/g;

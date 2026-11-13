@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en" data-theme="paper">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Alya’s Reader — private audiobook studio</title>
+<meta name="description" content="Turn your own EPUB, PDF, Word, ODT, RTF, HTML, FB2 or text files into local MP3 audiobooks with fast Piper voices.">
+<meta name="theme-color" content="#1b1814">
+<meta name="app-build" content="202611130021-13b8353">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest?v=202611130021-13b8353">
+<meta name="application-name" content="Alya’s Reader">
+<meta name="apple-mobile-web-app-title" content="Alya’s Reader">
+<link rel="stylesheet" href="css/app.css?v=202611130021-13b8353">
+<script src="vendor/jszip.min.js?v=202611130021-13b8353"></script>
+<script src="vendor/mammoth.browser.min.js?v=202611130021-13b8353"></script>
+<script src="vendor/pdfjs/pdf.min.js?v=202611130021-13b8353"></script>
+<script src="vendor/lame/lame.min.js?v=202611130021-13b8353"></script>
+</head>
+<body>
+
+<svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21V5.5Z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20"/></symbol>
+  <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4.5L6 21V3Z"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.64 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.64a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.36 9c.16.61.7 1.05 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5-11-6.5Z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M18 5.5v13L8 12l10-6.5Z" fill="currentColor" stroke="none"/><path d="M6 5v14"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 5.5v13L16 12 6 5.5Z" fill="currentColor" stroke="none"/><path d="M18 5v14"/></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m5 9 7 7 7-7"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 21h16"/></symbol>
+  <symbol id="i-headphones" viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><path d="M4 14h3v6H5.5A1.5 1.5 0 0 1 4 18.5V14ZM20 14h-3v6h1.5a1.5 1.5 0 0 0 1.5-1.5V14Z"/></symbol>
+<symbol id="i-loudhailer" viewBox="0 0 24 24"><path d="M4 10v4a1 1 0 0 0 1 1h2l5 4V5L7 9H5a1 1 0 0 0-1 1Z"/><path d="M14 8a5 5 0 0 1 0 8"/><path d="M17 5a9 9 0 0 1 0 14"/></symbol>
+<symbol id="i-ear" viewBox="0 0 24 24"><path d="M9 10.2a3.2 3.2 0 1 1 6.4 0c0 2.1-1.7 2.7-2.7 4.1-.9 1.2-.5 2.9-2.1 3.7"/><path d="M6.7 5.8a6.8 6.8 0 0 1 11.1 5.9c0 2.5-1.6 3.7-2.6 5.1"/><path d="M4 8.5v7M20.5 10.5v3"/></symbol>
+  <symbol id="i-type" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+  <symbol id="i-highlight" viewBox="0 0 24 24"><path d="m9 14-4 4v3h4l4-4"/><path d="m15 4 5 5-9 9-5-5 9-9Z"/><path d="M3 21h18"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4 7 7 0 0 0 20 14.5Z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12.5 5 5L20 6.5"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3ZM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+  <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></symbol>
+  <symbol id="i-waveform" viewBox="0 0 24 24"><path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 5v14"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z"/><path d="M14 3v6h6M9 13h6M9 17h4"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M9 14h6"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5Z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4 12h16m0 0-6-6m6 6-6 6"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="m3 3 18 18M10.6 10.6A2.5 2.5 0 0 0 13.4 13.4M9.9 5.2A9.4 9.4 0 0 1 12 5c5.5 0 9 5 9 7 0 .7-.4 1.7-1.2 2.7M6.6 6.7C4.5 8 3 10 3 12c0 2 3.5 7 9 7 1.5 0 2.8-.4 4-1"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></symbol>
+  <symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 1 9 9" fill="none"/></symbol>
+</svg>
+
+<div class="shell">
+  <aside class="rail" id="rail">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 64 64">
+          <path d="M32 21c-5-5-14-4-17 3-4 9 2 19 9 24 2 2 5 3.5 8 5 3-1.5 6-3 8-5 7-5 13-15 9-24-3-7-12-8-17-3Z" fill="#d9744a"/>
+          <path d="M32 21c0-4 .9-6.6 2.8-8.4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M35 12.7c2.2-2.3 5.2-2.2 6.6-.8-1.3 2.2-4.4 2.9-6.6.8Z" fill="#87b974"/>
+          <circle cx="50" cy="33" r="6.2" fill="var(--rail, #1a1713)"/>
+          <circle cx="51" cy="38" r="5.2" fill="var(--rail, #1a1713)"/>
+          <ellipse cx="24" cy="33" rx="4.8" ry="5.6" fill="var(--rail, #1a1713)"/>
+          <path d="M24 33c1-8 7-13 14-13 6 0 9.5 4 10 12" fill="none" stroke="#8fbf7a" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="48" cy="31" r="6" fill="#9ccf84"/>
+          <circle cx="45.8" cy="30" r="2.1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <circle cx="50.2" cy="30" r="2.1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M47.9 30h.8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          <path d="M45.6 33.6c1.3 1 3 1 4.3 0" fill="none" stroke="#21301c" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="brand-text">Alya’s Reader<em>private audiobook studio</em></span>
+    </div>
+
+    <nav class="rail-nav" aria-label="Main">
+      <button class="rail-link is-active" data-view="library">
+        <svg><use href="#i-book"/></svg><span>Books &amp; audio</span><span class="rail-count" id="railBookCount"></span>
+      </button>
+      <button class="rail-link" data-view="bookmarks">
+        <svg><use href="#i-bookmark"/></svg><span>Marks &amp; notes</span><span class="rail-count" id="railMarkCount"></span>
+      </button>
+      <button class="rail-link" data-view="settings">
+        <svg><use href="#i-settings"/></svg><span>Settings</span>
+      </button>
+    </nav>
+
+    <div class="rail-quote" id="railQuote">
+      <p>“A reader lives a thousand lives before he dies.”</p>
+      <span>George R. R. Martin</span>
+    </div>
+
+    <div class="rail-foot">
+      <div class="storage">
+        <div class="storage-top"><span>Local storage</span><span id="storageLabel">—</span></div>
+        <div class="storage-bar"><i id="storageFill"></i></div>
+        <p class="storage-note"><svg><use href="#i-shield"/></svg> Files stay local unless you choose an outside tool.</p>
+      </div>
+      <button class="rail-add" id="railAdd">
+        <svg><use href="#i-plus"/></svg> Add files
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn nav-toggle" id="navToggle" aria-label="Open navigation"><svg><use href="#i-menu"/></svg></button>
+      <div class="topbar-title">
+        <h1 id="viewTitle">Alya’s Reader</h1>
+        <p id="viewSubtitle">Turn your own books and documents into MP3 audiobooks.</p>
+      </div>
+      <div class="topbar-actions">
+        <label class="search" id="searchWrap">
+          <svg><use href="#i-search"/></svg>
+          <input id="librarySearch" type="search" placeholder="Search library" autocomplete="off" spellcheck="false" aria-label="Search library">
+        </label>
+        <button class="btn btn-quiet" id="freeBooksBtn" title="Find free books"><svg><use href="#i-book"/></svg><span>Free books</span></button>
+        <button class="btn btn-primary" id="addBookBtn"><svg><use href="#i-plus"/></svg><span>Add files</span></button>
+      </div>
+    </header>
+
+    <div class="view" id="view" tabindex="-1"></div>
+  </main>
+</div>
+
+<div class="drop-veil" id="dropVeil" aria-hidden="true">
+  <div class="drop-card">
+    <div class="drop-icon"><svg><use href="#i-upload"/></svg></div>
+    <h2>Drop files to make audiobooks</h2>
+    <p>EPUB, PDF, Word, ODT, RTF, HTML, FB2, TXT or Markdown</p>
+  </div>
+</div>
+
+<input type="file" id="fileInput" multiple accept=".epub,.pdf,.docx,.odt,.rtf,.html,.htm,.xhtml,.fb2,.txt,.text,.log,.rst,.md,.markdown,.cbz,.cbr,.zip,application/epub+zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text,application/rtf,text/rtf,text/html,application/x-fictionbook+xml,application/vnd.comicbook+zip,application/vnd.comicbook-rar,application/x-cbz,application/x-cbr" hidden>
+
+<!-- ░░ Reader ░░ -->
+<section class="reader" id="reader" aria-hidden="true" inert aria-label="Reader">
+  <header class="reader-bar" id="readerBar">
+    <button class="icon-btn reader-back" id="readerBack" title="Back to library (Esc)" aria-label="Back to library"><svg><use href="#i-chevron-left"/></svg></button>
+    <div class="reader-heading">
+      <span class="reader-book" id="readerBookTitle"></span>
+      <span class="reader-chapter" id="readerChapterTitle"></span>
+      <span class="reader-voice-chip" id="readerVoiceChip" role="button" tabindex="0" title="Change voice"></span>
+    </div>
+    <div class="reader-tools">
+      <button class="icon-btn" id="tocBtn" title="Contents (C)" aria-label="Contents"><svg><use href="#i-list"/></svg></button>
+      <button class="icon-btn" id="bmBtn" title="Bookmark (B)" aria-label="Bookmark this spot"><svg><use href="#i-bookmark"/></svg></button>
+      <button class="listen-btn" id="ttsBtn" title="Listen (T)">
+        <svg><use href="#i-loudhailer"/></svg><span>Listen</span>
+      </button>
+      <button class="icon-btn type-btn" id="typeBtn" title="Typeface &amp; theme (A)" aria-label="Reading appearance">Aa</button>
+      <button class="icon-btn" id="moreBtn" title="More" aria-label="More options"><svg><use href="#i-more"/></svg></button>
+    </div>
+  </header>
+
+  <div class="reader-stage" id="readerStage" tabindex="0"></div>
+
+  <div class="reader-foot">
+    <div class="reader-progress"><i id="progressFill"></i></div>
+    <div class="reader-foot-meta">
+      <div class="foot-nav">
+        <button class="foot-nav-btn" id="footPrev" aria-label="Previous chapter or page" title="Previous">‹</button>
+        <button class="foot-nav-label" id="footLeft" title="Open contents"></button>
+        <button class="foot-nav-btn" id="footNext" aria-label="Next chapter or page" title="Next">›</button>
+      </div>
+      <span id="footRight"></span>
+    </div>
+  </div>
+
+  <div class="tts-dock" id="ttsDock" hidden>
+    <div class="tts-scrub-row">
+      <span id="ttsElapsed" class="tts-time" title="Estimated position in the book">0:00</span>
+      <input id="ttsSeek" class="tts-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Seek through this book" disabled>
+      <span id="ttsDuration" class="tts-time" title="Estimated duration at the selected speed">0:00</span>
+    </div>
+    <div class="tts-controls">
+      <span class="tts-percent" id="ttsPercent" hidden></span>
+      <div class="tts-eq" id="ttsEq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <button class="icon-btn" data-tts="prev" title="Previous sentence" aria-label="Previous sentence"><svg><use href="#i-prev"/></svg></button>
+      <button class="tts-play" data-tts="toggle" title="Play / pause" aria-label="Play or pause"><svg><use href="#i-loudhailer"/></svg></button>
+      <button class="icon-btn" data-tts="next" title="Next sentence" aria-label="Next sentence"><svg><use href="#i-next"/></svg></button>
+      <div class="tts-info">
+        <span id="ttsVoiceLabel" class="tts-voice">Piper voice</span>
+        <span id="ttsPos" class="tts-pos">—</span>
+      </div>
+      <button class="tts-chip" data-tts="speed" title="Adjust playback speed" id="ttsSpeedBtn" aria-expanded="false">1.0×</button>
+      <button class="icon-btn" data-tts="settings" title="Voice settings" aria-label="Voice settings"><svg><use href="#i-sliders"/></svg></button>
+      <button class="icon-btn tts-close" data-tts="close" title="Stop listening" aria-label="Stop listening"><svg><use href="#i-x"/></svg></button>
+    </div>
+    <div class="tts-speed-panel" id="ttsSpeedPanel" hidden>
+      <label for="ttsSpeedRange">Playback speed <output id="ttsSpeedValue">1.0×</output></label>
+      <input id="ttsSpeedRange" type="range" min="0.5" max="2" step="0.01" value="1" aria-label="Playback speed">
+      <div class="tts-speed-ends"><span>0.5×</span><span>2×</span></div>
+    </div>
+  </div>
+
+  <aside class="drawer" id="tocDrawer" aria-hidden="true" aria-label="Contents">
+    <div class="drawer-head">
+      <div>
+        <span class="eyebrow">Contents</span>
+        <h2 id="tocTitle">Chapters</h2>
+      </div>
+      <button class="icon-btn" id="tocClose" aria-label="Close contents"><svg><use href="#i-x"/></svg></button>
+    </div>
+    <div class="drawer-body" id="tocList"></div>
+  </aside>
+  <div class="drawer-scrim" id="tocScrim"></div>
+
+  <div class="popover type-panel" id="typePanel" hidden>
+    <div class="panel-head">
+      <h3>Appearance</h3>
+      <button class="icon-btn" id="typeClose" aria-label="Close appearance panel"><svg><use href="#i-x"/></svg></button>
+    </div>
+    <div class="panel-scroll" id="typePanelBody"></div>
+  </div>
+
+  <div class="selection-bar" id="selBar" hidden>
+    <div class="sel-colors">
+      <button data-hlcolor="amber" class="dot amber" aria-label="Highlight amber"></button>
+      <button data-hlcolor="sage" class="dot sage" aria-label="Highlight sage"></button>
+      <button data-hlcolor="sky" class="dot sky" aria-label="Highlight sky"></button>
+      <button data-hlcolor="rose" class="dot rose" aria-label="Highlight rose"></button>
+    </div>
+    <span class="sel-sep"></span>
+    <button data-sel="define" title="Look up a word"><svg><use href="#i-search"/></svg> Define</button>
+    <button data-sel="listen" title="Read from here"><svg><use href="#i-loudhailer"/></svg> Listen</button>
+    <button data-sel="copy" title="Copy"><svg><use href="#i-copy"/></svg></button>
+    <button data-sel="note" title="Highlight with a note"><svg><use href="#i-note"/></svg></button>
+  </div>
+</section>
+
+<div class="sleep-veil" id="sleepVeil" hidden role="dialog" aria-label="Sleep timer ended">
+  <div class="sleep-card">
+    <div class="sleep-ico"><svg><use href="#i-moon"/></svg></div>
+    <h2>Sleep timer ended</h2>
+    <p>Narration has stopped. Tap anywhere to continue.</p>
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+<div class="toast-root" id="toastRoot" aria-live="polite"></div>
+
+<script type="module" src="js/main.js?v=202611130021-13b8353"></script>
+</body>
+</html>
